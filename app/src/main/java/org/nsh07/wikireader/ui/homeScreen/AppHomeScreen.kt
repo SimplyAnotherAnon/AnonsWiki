@@ -216,19 +216,24 @@ fun AppHomeScreen(
             }
         }
 
+    // Read the feed once and let the count lambdas close over the lists. They used to re-read
+    // backStack[0] and cast it whenever a page count was asked for, which throws once a failed
+    // refresh has replaced the feed with the logo screen.
+    val feed = backStack.firstOrNull() as? HomeSubscreen.Feed
+
+    val mostReadArticles = feed?.mostReadArticles
     val pagerState =
-        if (backStack[0] is HomeSubscreen.Feed && (backStack[0] as HomeSubscreen.Feed).mostReadArticles != null)
-            rememberPagerState { (backStack[0] as HomeSubscreen.Feed).mostReadArticles!!.size / 5 }
+        if (mostReadArticles != null) rememberPagerState { mostReadArticles.size / 5 }
         else null
 
+    val news = feed?.news
     val newsCarouselState =
-        if (backStack[0] is HomeSubscreen.Feed && (backStack[0] as HomeSubscreen.Feed).news != null)
-            rememberCarouselState(0) { (backStack[0] as HomeSubscreen.Feed).news!!.size }
+        if (news != null) rememberCarouselState(0) { news.size }
         else null
 
+    val onThisDay = feed?.onThisDay
     val otdCarouselState =
-        if (backStack[0] is HomeSubscreen.Feed && (backStack[0] as HomeSubscreen.Feed).onThisDay != null)
-            rememberCarouselState(0) { (backStack[0] as HomeSubscreen.Feed).onThisDay!!.size }
+        if (onThisDay != null) rememberCarouselState(0) { onThisDay.size }
         else null
 
     Box(modifier = modifier) { // The container for all the composables in the home screen

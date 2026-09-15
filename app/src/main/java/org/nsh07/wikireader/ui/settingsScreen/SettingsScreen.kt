@@ -399,15 +399,18 @@ fun SettingsScreen(
                 ) { setShowColorSchemeDialog(true) }
             }
             item {
+                // A stored value the map does not know (an older or newer build, an edited
+                // database) used to crash the settings screen on open.
+                val themeEntry = themeMap[theme] ?: themeMap.values.first()
                 ClickableListItem(
                     leadingContent = {
                         Icon(
-                            painterResource(themeMap[theme]!!.first),
+                            painterResource(themeEntry.first),
                             contentDescription = null
                         )
                     },
                     headlineContent = { Text(stringResource(string.settingTheme)) },
-                    supportingContent = { Text(themeMap[theme]!!.second) },
+                    supportingContent = { Text(themeEntry.second) },
                     colors = listItemColors,
                     items = 3,
                     index = 1

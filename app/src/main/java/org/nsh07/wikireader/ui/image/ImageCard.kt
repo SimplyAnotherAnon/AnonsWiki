@@ -76,15 +76,13 @@ fun SharedTransitionScope.ImageCard(
                 contentScale = contentScale,
                 background = background,
                 modifier = Modifier
-                    .then(
-                        photo.source?.let { src ->
-                            Modifier.sharedBounds(
-                                sharedContentState = rememberSharedContentState(
-                                    "article-image-$src"
-                                ),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        } ?: Modifier
+                    .sharedBounds(
+                        // photo.source is non-null, so the null-fallback the upstream change
+                        // wrapped this in never applied.
+                        sharedContentState = rememberSharedContentState(
+                            "article-image-${photo.source}"
+                        ),
+                        animatedVisibilityScope = animatedVisibilityScope
                     )
                     .fillMaxWidth()
                     .clip(cardShape)

@@ -44,15 +44,13 @@ fun SharedTransitionScope.PageImage(
                 contentDescription = photoDesc,
                 contentScale = contentScale,
                 modifier = Modifier
-                    .then(
-                        photo.source?.let { src ->
-                            Modifier.sharedBounds(
-                                sharedContentState = rememberSharedContentState(
-                                    "article-image-$src"
-                                ),
-                                animatedVisibilityScope = LocalNavAnimatedContentScope.current
-                            )
-                        } ?: Modifier
+                    .sharedBounds(
+                        // photo.source is non-null, so the null-fallback the upstream change
+                        // wrapped this in never applied.
+                        sharedContentState = rememberSharedContentState(
+                            "article-image-${photo.source}"
+                        ),
+                        animatedVisibilityScope = LocalNavAnimatedContentScope.current
                     )
                     .then(modifier)
                     .aspectRatio(photo.width.toFloat() / photo.height.toFloat())

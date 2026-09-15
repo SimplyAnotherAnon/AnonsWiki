@@ -215,7 +215,8 @@ fun String.toWikitextAnnotatedString(
     inIndentCode: Boolean = false,
     showRef: (String) -> Unit,
 ): AnnotatedString {
-    val currentDepth = WikitextParserState.recursionDepth.get()
+    // ThreadLocal.get() is a platform type; the initial value means it is never actually null.
+    val currentDepth = WikitextParserState.recursionDepth.get() ?: 0
     if (currentDepth >= MAX_WIKITEXT_RECURSION_DEPTH) {
         // Fallback: avoid runaway recursion on pathological or malformed wikitext
         return AnnotatedString(this)
@@ -551,12 +552,10 @@ fun String.toWikitextAnnotatedString(
                                             listOfNotNull(last, first).joinToString().trim()
                                         if (params["script-title"] != null) params["title"] =
                                             params["script-title"] ?: ""
-                                        val title =
-                                            if (params["title"] != null)
-                                                "''${params["title"]}''" + if (params["edition"] != null) {
-                                                    " (" + params["edition"]!! + " ed.)"
-                                                } else ""
-                                            else null
+                                        val title = params["title"]?.let { titleText ->
+                                            "''$titleText''" +
+                                                    (params["edition"]?.let { " ($it ed.)" } ?: "")
+                                        }
 
                                         listOfNotNull(
                                             "$author (${
@@ -603,13 +602,16 @@ fun String.toWikitextAnnotatedString(
                                             listOfNotNull(last, first).joinToString().trim()
                                         if (params["script-title"] != null) params["title"] =
                                             params["script-title"] ?: ""
-                                        var title =
-                                            if (params["title"] != null)
-                                                "''${params["title"]}''" + if (params["edition"] != null) {
-                                                    " (" + params["edition"]!! + " ed.)"
-                                                } else ""
-                                            else null
-                                        if (params["trans-title"] != null) title += " [${params["trans-title"]}]"
+                                        // `title += …` on a null title concatenated the string
+                                        // "null" into the citation, so a source with only a
+                                        // translated title rendered as `null [Translated title]`.
+                                        var title = params["title"]?.let { titleText ->
+                                            "''$titleText''" +
+                                                    (params["edition"]?.let { " ($it ed.)" } ?: "")
+                                        }
+                                        val transTitle = params["trans-title"]
+                                        if (transTitle != null)
+                                            title = ((title ?: "") + " [$transTitle]").trim()
 
                                         listOfNotNull(
                                             "$author (${
@@ -665,12 +667,10 @@ fun String.toWikitextAnnotatedString(
                                             listOfNotNull(last, first).joinToString().trim()
                                         if (params["script-title"] != null) params["title"] =
                                             params["script-title"] ?: ""
-                                        val title =
-                                            if (params["title"] != null)
-                                                "''${params["title"]}''" + if (params["edition"] != null) {
-                                                    " (" + params["edition"]!! + " ed.)"
-                                                } else ""
-                                            else null
+                                        val title = params["title"]?.let { titleText ->
+                                            "''$titleText''" +
+                                                    (params["edition"]?.let { " ($it ed.)" } ?: "")
+                                        }
                                         val volume =
                                             "'''${params["volume"]}'''${" (${params["issue"]})".takeIf { params["issue"] != null } ?: ""}${": ${params["pages"]}".takeIf { params["pages"] != null } ?: ""}".takeIf { params["volume"] != null }
 

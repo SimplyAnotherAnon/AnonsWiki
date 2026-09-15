@@ -48,11 +48,12 @@ suspend fun parseWikitable(
     for (line in lines) {
         var currColumnIndex = currentRow.size
 
-        while(rowSpan[currColumnIndex] != null && rowSpan[currColumnIndex]!! - 1 > 0) {
+        while (true) {
+            val remaining = rowSpan[currColumnIndex] ?: break
+            if (remaining <= 1) break
             currentRow.add(AnnotatedString(""))
-            rowSpan[currColumnIndex] = rowSpan[currColumnIndex]!! - 1
-            if (rowSpan[currColumnIndex]!! <= 1)
-                rowSpan.remove(currColumnIndex)
+            if (remaining - 1 <= 1) rowSpan.remove(currColumnIndex)
+            else rowSpan[currColumnIndex] = remaining - 1
             currColumnIndex++
         }
 

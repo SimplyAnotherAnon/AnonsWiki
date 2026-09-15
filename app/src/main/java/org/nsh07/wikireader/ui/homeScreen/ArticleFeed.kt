@@ -314,7 +314,7 @@ fun ArticleFeed(
                     }
                 }
             }
-            if (feedContent.mostReadArticles != null) {
+            if (feedContent.mostReadArticles != null && pagerState != null) {
                 item {
                     with(sharedScope) {
                         Text(
@@ -332,7 +332,7 @@ fun ArticleFeed(
                         )
 
                         HorizontalPager(
-                            state = pagerState!!, // PagerState is not null when mostReadArticles is not null
+                            state = pagerState,
                             verticalAlignment = Alignment.Top,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -608,7 +608,7 @@ fun ArticleFeed(
                     }
                 }
             }
-            if (feedContent.news != null) {
+            if (feedContent.news != null && newsCarouselState != null) {
                 item {
                     with(sharedScope) {
                         Text(
@@ -619,7 +619,7 @@ fun ArticleFeed(
                                 .padding(top = 32.dp)
                         )
                         HorizontalMultiBrowseCarousel(
-                            state = newsCarouselState!!,
+                            state = newsCarouselState,
                             itemSpacing = 8.dp,
                             flingBehavior = CarouselDefaults.multiBrowseFlingBehavior(
                                 newsCarouselState
@@ -724,7 +724,7 @@ fun ArticleFeed(
                     }
                 }
             }
-            if (feedContent.onThisDay != null) {
+            if (feedContent.onThisDay != null && otdCarouselState != null) {
                 item {
                     with(sharedScope) {
                         Text(
@@ -735,7 +735,7 @@ fun ArticleFeed(
                                 .padding(top = 32.dp)
                         )
                         HorizontalMultiBrowseCarousel(
-                            state = otdCarouselState!!,
+                            state = otdCarouselState,
                             itemSpacing = 8.dp,
                             flingBehavior = CarouselDefaults.multiBrowseFlingBehavior(
                                 otdCarouselState

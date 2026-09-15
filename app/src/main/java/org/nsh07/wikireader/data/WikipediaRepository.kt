@@ -12,17 +12,23 @@ internal val sectionTransclusion =
 
 internal val pageTransclusion = "\\{\\{:\\s*([^{}|#]+?)\\s*\\}\\}".toRegex()
 
+/**
+ * Each call takes an optional `host`. Passing one pins that request to a particular Wikipedia,
+ * which work running alongside the article being read needs so it cannot be redirected by, or
+ * redirect, a concurrent request. Leaving it null uses the app-wide host.
+ */
 interface WikipediaRepository {
-    suspend fun getPrefixSearchResults(query: String): WikiApiPrefixSearchResults
-    suspend fun getSearchResults(query: String): WikiApiSearchResults
-    suspend fun getPageData(query: String): WikiApiPageData
-    suspend fun getPageContent(title: String): String
-    suspend fun getRandomResult(): WikiApiPageData
+    suspend fun getPrefixSearchResults(query: String, host: String? = null): WikiApiPrefixSearchResults
+    suspend fun getSearchResults(query: String, host: String? = null): WikiApiSearchResults
+    suspend fun getPageData(query: String, host: String? = null): WikiApiPageData
+    suspend fun getPageContent(title: String, host: String? = null): String
+    suspend fun getRandomResult(host: String? = null): WikiApiPageData
     suspend fun getFeed(
         // Locale.ROOT keeps the date ASCII: the value goes straight into the feed URL, and
         // locales that default to non-Latin digits would otherwise build an invalid path.
         date: String = LocalDate.now()
-            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.ROOT))
+            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.ROOT)),
+        host: String? = null
     ): FeedApiResponse
 }
 
@@ -31,39 +37,47 @@ class NetworkWikipediaRepository(
     private val wikipediaPageApiService: WikipediaApiService,
     private val ioDispatcher: CoroutineDispatcher
 ) : WikipediaRepository {
-    override suspend fun getPrefixSearchResults(query: String): WikiApiPrefixSearchResults =
+    override suspend fun getPrefixSearchResults(query: String, host: String?): WikiApiPrefixSearchResults =
         withContext(ioDispatcher) {
-            wikipediaApiService.getPrefixSearchResults(query)
+            wikipediaApiService.getPrefixSearchResults(query, host)
         }
 
-    override suspend fun getSearchResults(query: String): WikiApiSearchResults =
+    override suspend fun getSearchResults(query: String, host: String?): WikiApiSearchResults =
         withContext(ioDispatcher) {
-            wikipediaApiService.getSearchResults(query)
-        }
-    override suspend fun getPageData(query: String): WikiApiPageData =
-        withContext(ioDispatcher) {
-            wikipediaApiService.getPageData(query)
+            wikipediaApiService.getSearchResults(query, host)
         }
 
-    override suspend fun getPageContent(title: String): String =
+    override suspend fun getPageData(query: String, host: String?): WikiApiPageData =
         withContext(ioDispatcher) {
-            val fetch: suspend (String) -> String = { wikipediaPageApiService.getPageContent(it) }
+            wikipediaApiService.getPageData(query, host)
+        }
+
+    override suspend fun getPageContent(title: String, host: String?): String =
+        withContext(ioDispatcher) {
+            // Transclusions are fetched from the same wiki as the page that transcludes them.
+            val fetch: suspend (String) -> String = {
+                wikipediaPageApiService.getPageContent(it, host)
+            }
             expandPageTransclusions(
-                expandSectionTransclusions(wikipediaPageApiService.getPageContent(title), fetch),
+                expandSectionTransclusions(
+                    wikipediaPageApiService.getPageContent(title, host),
+                    fetch
+                ),
                 fetch
             )
         }
 
-    override suspend fun getRandomResult(): WikiApiPageData =
+    override suspend fun getRandomResult(host: String?): WikiApiPageData =
         withContext(ioDispatcher) {
-            wikipediaApiService.getRandomResult()
+            wikipediaApiService.getRandomResult(host)
         }
 
     override suspend fun getFeed(
-        date: String
+        date: String,
+        host: String?
     ): FeedApiResponse =
         withContext(ioDispatcher) {
-            wikipediaApiService.getFeed(date)
+            wikipediaApiService.getFeed(date, host)
         }
 }
 

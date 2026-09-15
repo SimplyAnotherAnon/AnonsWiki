@@ -222,18 +222,19 @@ class HomeScreenViewModel(
         _homeScreenState.update { it.copy(isLoading = false) }
     }
 
-    private suspend fun loadSearchResults(query: String) {
+    private suspend fun loadSearchResults(query: String, lang: String? = null) {
         val q = query.trim()
+        val host = lang?.let { "$it.wikipedia.org" }
         if (q.isNotEmpty()) {
             try {
-                val prefixSearchResults = wikipediaRepository.getPrefixSearchResults(q)
+                val prefixSearchResults = wikipediaRepository.getPrefixSearchResults(q, host)
                 _appSearchBarState.update { currentState ->
                     currentState.copy(
                         prefixSearchResults = prefixSearchResults.query.pages.sortedBy { it.index }
                     )
                 }
 
-                val searchResults = wikipediaRepository.getSearchResults(q)
+                val searchResults = wikipediaRepository.getSearchResults(q, host)
                 val results = searchResults.query.pages.sortedBy { it.index }
                 val resultsParsed = results.map {
                     it.copy(
@@ -300,7 +301,7 @@ class HomeScreenViewModel(
                         )
                     }
                     if (!random) {
-                        loadSearchResults(q)
+                        loadSearchResults(q, setLang)
                         val prefixResults = appSearchBarState.value.prefixSearchResults
                         val searchResults = appSearchBarState.value.searchResults
                         if (prefixResults == null || searchResults == null) throw NetworkException()
@@ -384,14 +385,15 @@ class HomeScreenViewModel(
                         currentState.copy(isLoading = true, loadingProgress = null)
                     }
 
-                    val apiResponse = when (random) {
-                        false -> wikipediaRepository
-                            .getPageData(title!!)
+                    val host = "$setLang.wikipedia.org"
+                    val apiResponse = when {
+                        !random && title != null -> wikipediaRepository
+                            .getPageData(title, host)
                             .query
                             ?.pages?.get(0)
 
                         else -> wikipediaRepository
-                            .getRandomResult()
+                            .getRandomResult(host)
                             .query
                             ?.pages?.get(0)
                     }
@@ -400,7 +402,7 @@ class HomeScreenViewModel(
                         lastQuery = Pair(apiResponse.title, setLang)
 
                     val extractText = if (apiResponse != null)
-                        cleanUpWikitext(wikipediaRepository.getPageContent(apiResponse.title))
+                        cleanUpWikitext(wikipediaRepository.getPageContent(apiResponse.title, host))
                     else ""
                     val extract: List<String> = parseSections(extractText)
 
@@ -569,7 +571,8 @@ class HomeScreenViewModel(
                 }
 
                 try {
-                    val feedData = wikipediaRepository.getFeed()
+                    val feedData = wikipediaRepository
+                        .getFeed(host = "${preferencesState.value.lang}.wikipedia.org")
                     val sections = mutableListOf<Pair<Int, FeedSection>>()
                     var currentSection = 0
 
@@ -637,12 +640,14 @@ class HomeScreenViewModel(
         lang: String? = null
     ): WRStatus {
         val currentLang = lang ?: preferencesState.value.lang
-        interceptor.setHost("${currentLang}.wikipedia.org")
+        // Pinned to this request rather than set on the shared interceptor: saving runs alongside
+        // whatever the reader is doing, and swapping the app-wide host sent any page load in
+        // flight to the wrong Wikipedia.
+        val host = "${'$'}currentLang.wikipedia.org"
 
         val article = backStack.lastOrNull() as? HomeSubscreen.Article
         if (article == null) {
             Log.e("ViewModel", "Cannot save article, current screen is not an article")
-            interceptor.setHost("${preferencesState.value.lang}.wikipedia.org")
             return WRStatus.OTHER
         }
 
@@ -651,7 +656,7 @@ class HomeScreenViewModel(
 
             val pageTitle = title ?: article.title
             val apiResponse = wikipediaRepository
-                .getPageData(pageTitle)
+                .getPageData(pageTitle, host)
 
             val apiResponseQuery = apiResponse
                 .query
@@ -659,11 +664,10 @@ class HomeScreenViewModel(
 
             if (apiResponseQuery == null) {
                 Log.e("ViewModel", "Cannot save article, apiResponse is null")
-                interceptor.setHost("${preferencesState.value.lang}.wikipedia.org")
                 return WRStatus.NO_SEARCH_RESULT
             }
 
-            val pageContent = wikipediaRepository.getPageContent(apiResponseQuery.title)
+            val pageContent = wikipediaRepository.getPageContent(apiResponseQuery.title, host)
 
             appDatabaseRepository.insertSavedArticle(
                 SavedArticle(
@@ -685,7 +689,6 @@ class HomeScreenViewModel(
             Log.e("ViewModel", "Cannot save article: ${e.message}")
             e.printStackTrace()
             setSavedStatus(SavedStatus.NOT_SAVED)
-            interceptor.setHost("${preferencesState.value.lang}.wikipedia.org")
             return WRStatus.NETWORK_ERROR
         }
     }

@@ -41,7 +41,7 @@ fun ThemeDialog(
     setTheme: (String) -> Unit
 ) {
     val selectedOption =
-        remember { mutableStateOf(themeMap[theme]!!.second) }
+        remember { mutableStateOf((themeMap[theme] ?: themeMap.values.first()).second) }
     BasicAlertDialog(
         onDismissRequest = { setShowThemeDialog(false) }
     ) {
@@ -99,7 +99,7 @@ fun ThemeDialog(
                         shapes = ButtonDefaults.shapes(),
                         onClick = {
                             setShowThemeDialog(false)
-                            setTheme(reverseThemeMap[selectedOption.value]!!)
+                            reverseThemeMap[selectedOption.value]?.let(setTheme)
                         }
                     ) {
                         Text(stringResource(R.string.ok))
