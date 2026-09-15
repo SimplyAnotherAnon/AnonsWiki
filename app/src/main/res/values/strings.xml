@@ -37,6 +37,7 @@
     <string name="expand_section">Expand section</string>
     <string name="expandTable">Expand table</string>
     <string name="featuredArticle">Featured article</string>
+    <string name="fontStyleGoogleSansFlex">Google Sans Flex</string>
     <string name="fontStyleSansSerif">Sans-serif</string>
     <string name="fontStyleSerif">Serif</string>
     <string name="history">History</string>
@@ -48,6 +49,7 @@
     <string name="information">Information</string>
     <string name="instructions">Instructions</string>
     <string name="license">License</string>
+    <string name="lookUpInWiktionary">Wiktionary</string>
     <string name="moreOptions">More options</string>
     <string name="noSavedArticles">No saved articles</string>
     <string name="noSavedArticlesDesc">Click on the download button in the toolbar at the bottom while viewing an article to get started</string>
@@ -89,6 +91,7 @@
     <string name="settingFeedDesc">Show a feed of trending articles, news and more on app startup</string>
     <string name="settingFontSize">Font size</string>
     <string name="settingFontStyle">Font style</string>
+    <string name="settingHeadingFontStyle">Heading font</string>
     <string name="settingImageBackground">Image background</string>
     <string name="settingImageBackgroundDesc">Add a white background to transparent images. The background can help increase readability in dark mode.</string>
     <string name="settingImmersiveMode">Immersive mode</string>

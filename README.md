@@ -80,6 +80,9 @@ Supports light mode, dark mode, Material You dynamic colors and 300+ Wikipedia l
 - **Smooth animations:** Smooth and fluent animations
 - **Customizable colors:** Choose from light/dark themes and customize the Material 3 color palette
 - **Customizable font size:** Choose your own comfortable font size
+- **Customizable fonts:** Pick separate font families for article headings and body text, including
+  Google Sans Flex on devices that ship it
+- **Wiktionary lookup:** Long-press a word in an article and look it up in Wiktionary
 - **Data saver:** Save your limited data plan by loading text only
 - **Math expressions:** View properly rendered mathematical expressions for easily reading
   mathematical articles

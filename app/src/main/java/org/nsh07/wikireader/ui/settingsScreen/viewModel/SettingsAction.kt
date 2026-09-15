@@ -3,6 +3,7 @@ package org.nsh07.wikireader.ui.settingsScreen.viewModel
 sealed class SettingsAction {
     data class SaveColorScheme(val value: String) : SettingsAction()
     data class SaveFontStyle(val value: String) : SettingsAction()
+    data class SaveHeadingFontStyle(val value: String) : SettingsAction()
     data class SaveLang(val value: String) : SettingsAction()
     data class SaveTheme(val value: String) : SettingsAction()
 

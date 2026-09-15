@@ -8,6 +8,7 @@ data class PreferencesState(
     val theme: String = "auto",
     val lang: String = "en",
     val fontStyle: String = "sans",
+    val headingFontStyle: String = "serif",
     val colorScheme: String = Color.Companion.White.toString(),
     val fontSize: Int = 16,
     val blackTheme: Boolean = false,

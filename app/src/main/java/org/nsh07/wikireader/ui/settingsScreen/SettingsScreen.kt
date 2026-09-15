@@ -89,6 +89,12 @@ import org.nsh07.wikireader.ui.theme.WRShapeDefaults.bottomListItemShape
 import org.nsh07.wikireader.ui.theme.WRShapeDefaults.cardShape
 import org.nsh07.wikireader.ui.theme.WRShapeDefaults.middleListItemShape
 import org.nsh07.wikireader.ui.theme.WRShapeDefaults.topListItemShape
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.util.fastForEachIndexed
+import org.nsh07.wikireader.ui.theme.FONT_STYLE_GOOGLE_SANS_FLEX
+import org.nsh07.wikireader.ui.theme.FONT_STYLE_SANS
+import org.nsh07.wikireader.ui.theme.FONT_STYLE_SERIF
+import org.nsh07.wikireader.ui.theme.googleSansFlexAvailable
 import org.nsh07.wikireader.ui.theme.WikiReaderTheme
 import kotlin.math.round
 
@@ -124,23 +130,20 @@ fun SettingsScreenRoot(
         )
     }
     val fontStyleMap: Map<String, String> = remember {
-        mapOf(
-            "sans" to context.getString(string.fontStyleSansSerif),
-            "serif" to context.getString(string.fontStyleSerif)
-        )
+        buildMap {
+            put(FONT_STYLE_SANS, context.getString(string.fontStyleSansSerif))
+            put(FONT_STYLE_SERIF, context.getString(string.fontStyleSerif))
+            // Only an option on devices that actually ship the font.
+            if (googleSansFlexAvailable)
+                put(
+                    FONT_STYLE_GOOGLE_SANS_FLEX,
+                    context.getString(string.fontStyleGoogleSansFlex)
+                )
+        }
     }
-    val reverseFontStyleMap: Map<String, String> = remember {
-        mapOf(
-            context.getString(string.fontStyleSansSerif) to "sans",
-            context.getString(string.fontStyleSerif) to "serif"
-        )
-    }
-    val fontStyles = remember {
-        listOf(
-            context.getString(string.fontStyleSansSerif),
-            context.getString(string.fontStyleSerif)
-        )
-    }
+    val reverseFontStyleMap: Map<String, String> =
+        remember(fontStyleMap) { fontStyleMap.entries.associate { (key, label) -> label to key } }
+    val fontStyles = remember(fontStyleMap) { fontStyleMap.values.toList() }
 
     SettingsScreen(
         preferencesState = preferencesState,
@@ -199,6 +202,7 @@ fun SettingsScreen(
 
     val theme = preferencesState.theme
     val fontStyle = preferencesState.fontStyle
+    val headingFontStyle = preferencesState.headingFontStyle
     val color = preferencesState.colorScheme.toColor()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -491,51 +495,44 @@ fun SettingsScreen(
                     },
                     headlineContent = { Text(stringResource(string.settingFontStyle)) },
                     supportingContent = {
-                        Row(
-                            horizontalArrangement =
-                                Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            fontStyles.forEachIndexed { index, label ->
-                                ToggleButton(
-                                    checked = label == fontStyleMap[fontStyle],
-                                    onCheckedChange = {
-                                        onAction(
-                                            SettingsAction.SaveFontStyle(
-                                                reverseFontStyleMap[label] ?: "sans"
-                                            )
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(top = 4.dp)
-                                        .height(40.dp),
-                                    shapes =
-                                        when (index) {
-                                            0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                            fontStyles.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                                            else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                        }
-                                ) {
-                                    AnimatedVisibility(
-                                        label == fontStyleMap[fontStyle],
-                                        enter = scaleIn(motionScheme.fastSpatialSpec()) +
-                                                expandHorizontally(motionScheme.fastSpatialSpec()) +
-                                                fadeIn(),
-                                        exit = scaleOut(motionScheme.fastSpatialSpec()) +
-                                                shrinkHorizontally(motionScheme.fastSpatialSpec()) +
-                                                fadeOut()
-                                    ) {
-                                        Icon(
-                                            painterResource(R.drawable.check),
-                                            contentDescription = null
-                                        )
-                                    }
-                                    Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
-                                    Text(label)
-                                }
+                        FontStyleToggleGroup(
+                            fontStyles = fontStyles,
+                            selectedLabel = fontStyleMap[fontStyle],
+                            onSelect = {
+                                onAction(
+                                    SettingsAction.SaveFontStyle(
+                                        reverseFontStyleMap[it] ?: FONT_STYLE_SANS
+                                    )
+                                )
                             }
-                        }
+                        )
+                    },
+                    colors = listItemColors,
+                    modifier = Modifier
+                        .clip(middleListItemShape)
+                )
+            }
+            item {
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            painterResource(R.drawable.serif),
+                            contentDescription = null
+                        )
+                    },
+                    headlineContent = { Text(stringResource(string.settingHeadingFontStyle)) },
+                    supportingContent = {
+                        FontStyleToggleGroup(
+                            fontStyles = fontStyles,
+                            selectedLabel = fontStyleMap[headingFontStyle],
+                            onSelect = {
+                                onAction(
+                                    SettingsAction.SaveHeadingFontStyle(
+                                        reverseFontStyleMap[it] ?: FONT_STYLE_SERIF
+                                    )
+                                )
+                            }
+                        )
                     },
                     colors = listItemColors,
                     modifier = Modifier
@@ -706,23 +703,20 @@ fun SettingsPreview() {
         )
     }
     val fontStyleMap: Map<String, String> = remember {
-        mapOf(
-            "sans" to context.getString(string.fontStyleSansSerif),
-            "serif" to context.getString(string.fontStyleSerif)
-        )
+        buildMap {
+            put(FONT_STYLE_SANS, context.getString(string.fontStyleSansSerif))
+            put(FONT_STYLE_SERIF, context.getString(string.fontStyleSerif))
+            // Only an option on devices that actually ship the font.
+            if (googleSansFlexAvailable)
+                put(
+                    FONT_STYLE_GOOGLE_SANS_FLEX,
+                    context.getString(string.fontStyleGoogleSansFlex)
+                )
+        }
     }
-    val reverseFontStyleMap: Map<String, String> = remember {
-        mapOf(
-            context.getString(string.fontStyleSansSerif) to "sans",
-            context.getString(string.fontStyleSerif) to "serif"
-        )
-    }
-    val fontStyles = remember {
-        listOf(
-            context.getString(string.fontStyleSansSerif),
-            context.getString(string.fontStyleSerif)
-        )
-    }
+    val reverseFontStyleMap: Map<String, String> =
+        remember(fontStyleMap) { fontStyleMap.entries.associate { (key, label) -> label to key } }
+    val fontStyles = remember(fontStyleMap) { fontStyleMap.values.toList() }
     WikiReaderTheme {
         SettingsScreen(
             preferencesState = PreferencesState(),
@@ -750,3 +744,54 @@ data class SettingsSwitchItem(
     val actionConstructor: (Boolean) -> SettingsAction,
     val enabled: Boolean = true
 )
+
+/**
+ * The connected button group used to pick a font family, shared by the body and heading settings.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun FontStyleToggleGroup(
+    fontStyles: List<String>,
+    selectedLabel: String?,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        fontStyles.fastForEachIndexed { index, label ->
+            val checked = label == selectedLabel
+            ToggleButton(
+                checked = checked,
+                onCheckedChange = { onSelect(label) },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = 4.dp)
+                    .height(40.dp),
+                shapes =
+                    when (index) {
+                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                        fontStyles.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                    }
+            ) {
+                AnimatedVisibility(
+                    checked,
+                    enter = scaleIn(motionScheme.fastSpatialSpec()) +
+                            expandHorizontally(motionScheme.fastSpatialSpec()) +
+                            fadeIn(),
+                    exit = scaleOut(motionScheme.fastSpatialSpec()) +
+                            shrinkHorizontally(motionScheme.fastSpatialSpec()) +
+                            fadeOut()
+                ) {
+                    Icon(
+                        painterResource(R.drawable.check),
+                        contentDescription = null
+                    )
+                }
+                Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}

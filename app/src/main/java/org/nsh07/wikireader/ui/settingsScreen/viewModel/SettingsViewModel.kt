@@ -39,6 +39,9 @@ class SettingsViewModel(
                 )
             val fontStyle = appPreferencesRepository.readStringPreference("font-style")
                 ?: appPreferencesRepository.saveStringPreference("font-style", "sans")
+            val headingFontStyle =
+                appPreferencesRepository.readStringPreference("heading-font-style")
+                    ?: appPreferencesRepository.saveStringPreference("heading-font-style", "serif")
             val lang = appPreferencesRepository.readStringPreference("lang")
                 ?: appPreferencesRepository.saveStringPreference("lang", "en")
             val theme = appPreferencesRepository.readStringPreference("theme")
@@ -74,6 +77,7 @@ class SettingsViewModel(
                     expandedSections = expandedSections,
                     fontSize = fontSize,
                     fontStyle = fontStyle,
+                    headingFontStyle = headingFontStyle,
                     imageBackground = imageBackground,
                     immersiveMode = immersiveMode,
                     lang = lang,
@@ -107,6 +111,13 @@ class SettingsViewModel(
                     currentState.copy(fontStyle = action.value)
                 }
                 appPreferencesRepository.saveStringPreference("font-style", action.value)
+            }
+
+            is SettingsAction.SaveHeadingFontStyle -> viewModelScope.launch {
+                preferencesStateMutableFlow.update { currentState ->
+                    currentState.copy(headingFontStyle = action.value)
+                }
+                appPreferencesRepository.saveStringPreference("heading-font-style", action.value)
             }
 
             is SettingsAction.SaveLang -> {

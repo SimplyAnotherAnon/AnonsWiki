@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import org.nsh07.wikireader.ui.theme.fontFamilyOf
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import kotlinx.coroutines.delay
@@ -65,8 +66,10 @@ fun PageContent(
     val photoDesc = content.photoDesc
     val fontSize = preferencesState.fontSize
     val fontFamily = remember(preferencesState.fontStyle) {
-        if (preferencesState.fontStyle == "sans") FontFamily.SansSerif
-        else FontFamily.Serif
+        fontFamilyOf(preferencesState.fontStyle)
+    }
+    val headingFontFamily = remember(preferencesState.headingFontStyle) {
+        fontFamilyOf(preferencesState.headingFontStyle)
     }
     val lang = preferencesState.lang
     val pageId = content.pageId
@@ -123,7 +126,7 @@ fun PageContent(
                             Text(
                                 text = content.title,
                                 style = MaterialTheme.typography.displaySmallEmphasized,
-                                fontFamily = FontFamily.Serif,
+                                fontFamily = headingFontFamily,
                                 modifier = Modifier
                                     .sharedBounds(
                                         sharedContentState = rememberSharedContentState(
@@ -140,7 +143,7 @@ fun PageContent(
                                     text = photoDesc,
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = colorScheme.onSurfaceVariant,
-                                    fontFamily = FontFamily.Serif,
+                                    fontFamily = headingFontFamily,
                                     modifier = Modifier
                                         .sharedBounds(
                                             sharedContentState = rememberSharedContentState(
@@ -175,7 +178,7 @@ fun PageContent(
             }
             item(key = content.title + "#--desc--") { // Main description
                 if (content.extract.isNotEmpty())
-                    SelectionContainer {
+                    WiktionarySelectionContainer(lang = content.currentLang ?: "en") {
                         ParsedBodyText(
                             body = content.extract[0],
                             lang = content.currentLang ?: "en",
@@ -199,8 +202,9 @@ fun PageContent(
                 key = { i, it -> "$pageId.$lang#$i" }
             ) { i: Int, it: List<AnnotatedString> ->// Expandable sections logic
                 if (i % 2 == 1)
-                    SelectionContainer {
+                    WiktionarySelectionContainer(lang = content.currentLang ?: "en") {
                         ExpandableSection(
+                            headingFontFamily = headingFontFamily,
                             title = content.extract[i],
                             body = content.extract.getOrElse(i + 1) { emptyList() },
                             lang = content.currentLang ?: "en",

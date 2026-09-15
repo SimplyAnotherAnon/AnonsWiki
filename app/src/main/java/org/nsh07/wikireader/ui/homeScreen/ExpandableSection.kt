@@ -50,6 +50,7 @@ fun ExpandableSection(
     lang: String,
     fontSize: Int,
     fontFamily: FontFamily,
+    headingFontFamily: FontFamily,
     sharedScope: SharedTransitionScope,
     expanded: Boolean,
     renderMath: Boolean,
@@ -102,7 +103,7 @@ fun ExpandableSection(
                     out.replace("<.+>".toRegex(), "")
                 },
                 style = MaterialTheme.typography.headlineMediumEmphasized,
-                fontFamily = FontFamily.Serif,
+                fontFamily = headingFontFamily,
                 fontSize = (28 * (fontSize / 16.0)).toInt().sp,
                 lineHeight = (36 * (fontSize / 16.0)).toInt().sp,
                 modifier = Modifier
@@ -146,6 +147,7 @@ fun ExpandableSectionPreview() {
                 lang = "en",
                 fontSize = 16,
                 fontFamily = FontFamily.SansSerif,
+                headingFontFamily = FontFamily.Serif,
                 sharedScope = this@SharedTransitionLayout,
                 expanded = false,
                 renderMath = true,
