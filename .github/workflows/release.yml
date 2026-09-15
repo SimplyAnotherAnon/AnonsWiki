@@ -1,0 +1,77 @@
+name: Release
+
+# Publishes an APK to GitHub Releases. Push a tag (for example v2.5.5-fork.1), or
+# run the workflow manually and give it a tag that already exists.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Stage APK
+        id: stage
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/AnonsWiki-$TAG-debug.apk"
+          echo "apk=dist/AnonsWiki-$TAG-debug.apk" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<EOF
+          Built from commit \`$(git rev-parse HEAD)\`.
+
+          **This APK is debug-signed.** The project has no release signing config, so
+          \`assembleRelease\` produces an unsigned APK that Android will not install.
+          Install this build only if a debug-signed app is acceptable: it cannot be
+          installed over, or upgraded from, an F-Droid or Play Store copy of WikiReader.
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${{ steps.stage.outputs.apk }}" --clobber
+          else
+            gh release create "$TAG" \
+              --title "AnonsWiki ${{ steps.stage.outputs.version }} ($TAG)" \
+              --notes-file release-notes.md \
+              "${{ steps.stage.outputs.apk }}"
+          fi
