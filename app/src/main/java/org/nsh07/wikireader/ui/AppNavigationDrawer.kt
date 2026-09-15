@@ -235,7 +235,8 @@ private fun AppNavigationRailContent(
         unselectedIconColor = colorScheme.onSurfaceVariant,
         unselectedTextColor = colorScheme.onSurfaceVariant,
         selectedIconColor = colorScheme.onSecondaryContainer,
-        selectedTextColor = navigationItemSelectedTextColor,
+        selectedTextColorTopIconPosition = navigationItemSelectedTextColor,
+        selectedTextColorStartIconPosition = navigationItemSelectedTextColor,
         selectedIndicatorColor = colorScheme.secondaryContainer,
     )
 
@@ -243,7 +244,8 @@ private fun AppNavigationRailContent(
         unselectedIconColor = colorScheme.onSurfaceVariant,
         unselectedTextColor = colorScheme.onSurfaceVariant,
         selectedIconColor = colorScheme.onSurface,
-        selectedTextColor = colorScheme.onSurface,
+        selectedTextColorTopIconPosition = colorScheme.onSurface,
+        selectedTextColorStartIconPosition = colorScheme.onSurface,
         selectedIndicatorColor = colorScheme.surfaceContainerHighest,
     )
 

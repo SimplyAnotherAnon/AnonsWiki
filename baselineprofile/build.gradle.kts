@@ -2,13 +2,13 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.test)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.baselineprofile)
 }
 
 android {
     namespace = "org.nsh07.baselineprofile"
-    compileSdk = 36
+    compileSdk = 37
+    compileSdkMinor = 2
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

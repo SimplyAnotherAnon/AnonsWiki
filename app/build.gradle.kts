@@ -6,14 +6,14 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.baselineprofile)
     alias(libs.plugins.jetbrains.compose.compiler)
-    alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.jetbrains.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "org.nsh07.wikireader"
-    compileSdk = 36
+    compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "org.nsh07.wikireader"
