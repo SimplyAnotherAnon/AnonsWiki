@@ -301,14 +301,17 @@ class HomeScreenViewModel(
                     }
                     if (!random) {
                         loadSearchResults(q)
-                        if (appSearchBarState.value.prefixSearchResults != null && appSearchBarState.value.searchResults != null)
-                            loadPage(
-                                title = if (appSearchBarState.value.prefixSearchResults!!.isEmpty())
-                                    appSearchBarState.value.searchResults!![0].title
-                                else appSearchBarState.value.prefixSearchResults!![0].title,
-                                lang = setLang
-                            )
-                        else throw NetworkException()
+                        val prefixResults = appSearchBarState.value.prefixSearchResults
+                        val searchResults = appSearchBarState.value.searchResults
+                        if (prefixResults == null || searchResults == null) throw NetworkException()
+
+                        // Indexing straight into searchResults used to throw when a query matched
+                        // nothing, and the catch below reports any non-network failure as "no
+                        // search results", so a genuine bug looked like an empty search.
+                        val title = prefixResults.firstOrNull()?.title
+                            ?: searchResults.firstOrNull()?.title
+                        if (title != null) loadPage(title = title, lang = setLang)
+                        else showNoSearchResults(q, setLang)
                     } else
                         loadPage(title = null, random = true)
                 } catch (e: Exception) {
@@ -331,28 +334,27 @@ class HomeScreenViewModel(
                         _homeScreenState.update { currentState ->
                             currentState.copy(isLoading = false)
                         }
-                    } else {
-                        backStack.add(
-                            HomeSubscreen.Article(
-                                title = "Error",
-                                extract = listOf("No search results found for $q").map {
-                                    parseWikitext(it)
-                                },
-                                photo = null,
-                                photoDesc = null,
-                                langs = null,
-                                currentLang = setLang,
-                                pageId = null,
-                                savedStatus = SavedStatus.NOT_SAVED
-                            )
-                        )
-                        _homeScreenState.update { currentState ->
-                            currentState.copy(isLoading = false)
-                        }
-                    }
+                    } else showNoSearchResults(q, setLang)
                 }
             }
         }
+    }
+
+    /** Shows the "nothing matched" screen for [query]. */
+    private suspend fun showNoSearchResults(query: String, lang: String?) {
+        backStack.add(
+            HomeSubscreen.Article(
+                title = "Error",
+                extract = listOf("No search results found for $query").map { parseWikitext(it) },
+                photo = null,
+                photoDesc = null,
+                langs = null,
+                currentLang = lang,
+                pageId = null,
+                savedStatus = SavedStatus.NOT_SAVED
+            )
+        )
+        _homeScreenState.update { currentState -> currentState.copy(isLoading = false) }
     }
 
     /**

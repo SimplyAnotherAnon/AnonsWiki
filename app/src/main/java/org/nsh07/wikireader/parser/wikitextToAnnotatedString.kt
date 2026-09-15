@@ -1635,8 +1635,11 @@ fun String.substringMatchingParen(
         i++
     }
 
+    // Unbalanced input: return what is left from startIndex. Returning the whole string instead
+    // handed callers the text preceding the opening bracket as if it were part of the element, and
+    // let them advance their cursor by more characters than they had actually consumed.
     return if (i < length) this.substring(startIndex, i + 1)
-    else this
+    else this.substring(startIndex.coerceIn(0, length))
 }
 
 fun String.buildRefList() {

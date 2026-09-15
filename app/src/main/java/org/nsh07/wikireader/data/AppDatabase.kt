@@ -31,8 +31,10 @@ abstract class AppDatabase : RoomDatabase() {
         private var Instance: AppDatabase? = null
 
         fun getDatabase(context: Context): AppDatabase {
+            // The second null check is what makes the double-checked locking work: without it two
+            // threads that both pass the first check each build a database over the same file.
             return Instance ?: synchronized(this) {
-                Room.databaseBuilder(context, AppDatabase::class.java, "app_database")
+                Instance ?: Room.databaseBuilder(context, AppDatabase::class.java, "app_database")
                     .build()
                     .also { Instance = it }
             }
