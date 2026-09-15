@@ -49,6 +49,25 @@ private val NUMBERED_PARAMETER = "^\\s*\\d+\\s*=\\s*".toRegex()
 
 private fun String.linkArgument(): String = replaceFirst(NUMBERED_PARAMETER, "").trim()
 
+/**
+ * Templates standing in for a character that would otherwise be read as markup. The key is the
+ * template with its closing braces already stripped, as the parser sees it.
+ */
+private val escapeTemplates = mapOf(
+    "{{!" to "|",
+    "{{!!" to "||",
+    "{{=" to "=",
+    "{{(" to "{",
+    "{{)" to "}",
+    "{{'" to "’",
+    "{{'-" to "’",
+    "{{-'" to "’",
+    "{{`" to "‘",
+)
+
+/** An HTML tag, so unknown ones can be dropped rather than printed. */
+private val htmlTag = "</?[a-zA-Z][a-zA-Z0-9]*(\\s[^<>]*)?/?>".toRegex()
+
 /** Matches an ion charge such as `2+`, `+`, `3-` or `2−`. */
 private val CHEM_CHARGE = "^\\d*[+\u2212-]$".toRegex()
 
@@ -511,6 +530,13 @@ fun String.toWikitextAnnotatedString(
                             i += curr.length - 1
                         }
 
+                        htmlTag.matchAt(currSubstring, 0) != null -> {
+                            // Drop the tag itself and keep whatever it wraps. Wikipedia scatters
+                            // invisible anchors through headings, and every tag the parser does
+                            // not know was printed verbatim.
+                            i += (htmlTag.matchAt(currSubstring, 0)?.value?.length ?: 1) - 1
+                        }
+
                         else -> {
                             append(input[i])
                         }
@@ -529,21 +555,11 @@ fun String.toWikitextAnnotatedString(
                             } -> {
                                 val text =
                                     if (currSubstring.startsWith("$refTemplate book", true)) {
-                                        val params = mutableMapOf<String, String>()
-
-                                        // Extract inside of {{Cite book ...}}
-                                        val content =
-                                            currSubstring.substringAfter('|').trim()
-
-                                        // Split by pipes, then split each param by '='
-                                        val parts = content.split("|")
-                                        for (part in parts) {
-                                            val (key, value) = part.split("=", limit = 2)
-                                                .map { it.trim() }.let {
-                                                    if (it.size == 2) it[0] to it[1] else return@let null
-                                                } ?: continue
-                                            params[key.lowercase()] = value
-                                        }
+                                        // Bracket-aware: splitting on every '|' cut parameters
+                                        // whose value contains a nested template or link, and the
+                                        // remainder of the citation was printed raw.
+                                        val params =
+                                            citationParameters(currSubstring).toMutableMap()
 
                                         // Build citation text
                                         val first = params["first"]
@@ -579,21 +595,11 @@ fun String.toWikitextAnnotatedString(
                                         currSubstring.startsWith("$refTemplate AV media", true) ||
                                         currSubstring.startsWith("$refTemplate press release", true)
                                     ) {
-                                        val params = mutableMapOf<String, String>()
-
-                                        // Extract inside of {{Cite ...}}
-                                        val content =
-                                            currSubstring.substringAfter('|').trim()
-
-                                        // Split by pipes, then split each param by '='
-                                        val parts = content.split("|")
-                                        for (part in parts) {
-                                            val (key, value) = part.split("=", limit = 2)
-                                                .map { it.trim() }.let {
-                                                    if (it.size == 2) it[0] to it[1] else return@let null
-                                                } ?: continue
-                                            params[key.lowercase()] = value
-                                        }
+                                        // Bracket-aware: splitting on every '|' cut parameters
+                                        // whose value contains a nested template or link, and the
+                                        // remainder of the citation was printed raw.
+                                        val params =
+                                            citationParameters(currSubstring).toMutableMap()
 
                                         // Build citation text
                                         val first = params["first"]
@@ -644,21 +650,11 @@ fun String.toWikitextAnnotatedString(
                                             true
                                         )
                                     ) {
-                                        val params = mutableMapOf<String, String>()
-
-                                        // Extract inside of {{Cite journal ...}}
-                                        val content =
-                                            currSubstring.substringAfter('|').trim()
-
-                                        // Split by pipes, then split each param by '='
-                                        val parts = content.split("|")
-                                        for (part in parts) {
-                                            val (key, value) = part.split("=", limit = 2)
-                                                .map { it.trim() }.let {
-                                                    if (it.size == 2) it[0] to it[1] else return@let null
-                                                } ?: continue
-                                            params[key.lowercase()] = value
-                                        }
+                                        // Bracket-aware: splitting on every '|' cut parameters
+                                        // whose value contains a nested template or link, and the
+                                        // remainder of the citation was printed raw.
+                                        val params =
+                                            citationParameters(currSubstring).toMutableMap()
 
                                         // Build citation text
                                         val first = params["first"]
@@ -701,8 +697,18 @@ fun String.toWikitextAnnotatedString(
                                             .plus(".")
                                             .trim()
                                             .twas()
-                                    } else AnnotatedString(currSubstring)
+                                    } else {
+                                        // Wikipedia has dozens of cite variants beyond the three
+                                        // handled above; unhandled ones used to fall through to
+                                        // their own raw wikitext.
+                                        renderCitation(currSubstring)?.twas()
+                                            ?: AnnotatedString("")
+                                    }
                                 append(text)
+                            }
+
+                            currSubstring.trimEnd() in escapeTemplates -> {
+                                append(escapeTemplates.getValue(currSubstring.trimEnd()))
                             }
 
                             currSubstring.startsWith("{{abbr", ignoreCase = true) -> {
@@ -1478,7 +1484,7 @@ fun String.toWikitextAnnotatedString(
                     if ((i == 0 || input.getOrNull(i - 1) == '\n') && newLine) {
                         val bulletCount =
                             input.substring(i).substringBefore(' ').count { it == '*' }
-                        val curr = input.substring(i).substringBefore('\n')
+                        val curr = input.listItemAt(i)
                         withStyle(
                             ParagraphStyle(
                                 textIndent = TextIndent(restLine = (12 * bulletCount).sp),
@@ -1492,7 +1498,7 @@ fun String.toWikitextAnnotatedString(
                             append("\t\t".repeat(bulletCount - 1))
                             append(bullet)
                             append("\t\t")
-                            append(curr.substringAfterLast('*').trim().twas())
+                            append(curr.dropWhile { it == '*' }.trim().twas())
                         }
                         i += curr.length
                     } else append(input[i])
@@ -1501,7 +1507,7 @@ fun String.toWikitextAnnotatedString(
                     if ((i == 0 || input.getOrNull(i - 1) == '\n') && newLine) {
                         val bulletCount =
                             input.substring(i).substringBefore(' ').count { it == '#' }
-                        val curr = input.substring(i).substringBefore('\n')
+                        val curr = input.listItemAt(i)
                         withStyle(
                             ParagraphStyle(
                                 textIndent = TextIndent(restLine = (27 * bulletCount).sp),
@@ -1515,7 +1521,7 @@ fun String.toWikitextAnnotatedString(
                             append("\t\t".repeat(bulletCount - 1))
                             append("$number.")
                             append("\t\t")
-                            append(curr.substringAfterLast('#').trim().twas())
+                            append(curr.dropWhile { it == '#' }.trim().twas())
                         }
                         i += curr.length
                         number++
@@ -1602,9 +1608,10 @@ fun String.toWikitextAnnotatedString(
                             }
                         ) {
                             append(
-                                (linkText.substringAfter(' ').removeSuffix("]")
-                                    .trim() + " \uD83D\uDD17")
+                                linkText.substringAfter(' ').removeSuffix("]").trim()
+                                    .twasNoNewline()
                             )
+                            append(" \uD83D\uDD17")
                         }
                         i += linkText.length - 1
                     } else append(input[i])
@@ -1617,6 +1624,32 @@ fun String.toWikitextAnnotatedString(
     } finally {
         WikitextParserState.recursionDepth.set(currentDepth)
     }
+}
+
+/**
+ * The text of the list item starting at [start]: everything up to the first line break that is not
+ * inside a template or a link.
+ *
+ * Wikipedia writes bibliography entries as one bullet holding a citation spread over a dozen
+ * lines. Cutting at the first newline left the parser with `* {{Cite journal` and spilled every
+ * parameter of the template into the article as raw wikitext.
+ */
+internal fun String.listItemAt(start: Int): String {
+    var braceDepth = 0
+    var bracketDepth = 0
+    var i = start
+
+    while (i < length) {
+        when {
+            startsWith("{{", i) -> { braceDepth++; i += 2 }
+            startsWith("}}", i) -> { if (braceDepth > 0) braceDepth--; i += 2 }
+            startsWith("[[", i) -> { bracketDepth++; i += 2 }
+            startsWith("]]", i) -> { if (bracketDepth > 0) bracketDepth--; i += 2 }
+            this[i] == '\n' && braceDepth == 0 && bracketDepth == 0 -> return substring(start, i)
+            else -> i++
+        }
+    }
+    return substring(start)
 }
 
 fun String.substringMatchingParen(
@@ -1689,7 +1722,9 @@ object ReferenceData {
     val refListIndex = mutableMapOf<Int, String>()
     val refListCount = mutableMapOf<String, Int>()
     var refTemplate = "{{cite"
-    val refTemplates = listOf("{{cite", "{{lien", "{{cita|")
+    // "{{citation" is the bare {{citation}} template: it shares no prefix with "{{cite", so
+    // without it here those references were dropped from the article entirely.
+    val refTemplates = listOf("{{cite", "{{citation", "{{lien", "{{cita|")
     val infoboxTemplates = listOf("{{infobox", "{{taxobox", "{{Automatic taxobox", "{{Картка")
 
     /**

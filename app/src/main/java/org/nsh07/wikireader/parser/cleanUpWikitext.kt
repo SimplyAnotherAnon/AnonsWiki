@@ -91,7 +91,7 @@ private fun expandEpisodeTables(wikitext: String): String {
  * Splits template parameters on `|`, ignoring pipes nested in `{{...}}` templates and
  * `[[...]]` links.
  */
-private fun String.splitTemplateParameters(): List<String> {
+internal fun String.splitTemplateParameters(): List<String> {
     val out = mutableListOf<String>()
     var braceDepth = 0
     var bracketDepth = 0
