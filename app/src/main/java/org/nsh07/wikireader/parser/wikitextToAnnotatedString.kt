@@ -1688,4 +1688,19 @@ object ReferenceData {
     var refTemplate = "{{cite"
     val refTemplates = listOf("{{cite", "{{lien", "{{cita|")
     val infoboxTemplates = listOf("{{infobox", "{{taxobox", "{{Automatic taxobox", "{{Картка")
+
+    /**
+     * Clears the per-article reference state.
+     *
+     * Every field here is global, so anything left behind leaks into the next article that is
+     * parsed. [refListIndex] in particular backs {{reflist}}: while it was not being cleared, an
+     * article's reference list kept the trailing entries of every longer article read before it.
+     */
+    fun reset() {
+        refCount = 1
+        refList.clear()
+        refListIndex.clear()
+        refListCount.clear()
+        refTemplate = "{{cite"
+    }
 }

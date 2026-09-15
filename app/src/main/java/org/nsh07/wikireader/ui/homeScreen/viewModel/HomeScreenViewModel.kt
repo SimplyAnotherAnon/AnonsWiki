@@ -53,10 +53,8 @@ import org.nsh07.wikireader.data.langCodeToName
 import org.nsh07.wikireader.data.parseSections
 import org.nsh07.wikireader.network.HostSelectionInterceptor
 import org.nsh07.wikireader.network.NetworkException
+import org.nsh07.wikireader.parser.ReferenceData
 import org.nsh07.wikireader.parser.ReferenceData.infoboxTemplates
-import org.nsh07.wikireader.parser.ReferenceData.refCount
-import org.nsh07.wikireader.parser.ReferenceData.refList
-import org.nsh07.wikireader.parser.ReferenceData.refListCount
 import org.nsh07.wikireader.parser.buildRefList
 import org.nsh07.wikireader.parser.cleanUpWikitext
 import org.nsh07.wikireader.parser.substringMatchingParen
@@ -414,6 +412,7 @@ class HomeScreenViewModel(
                     val articleSections = mutableListOf<Pair<Int, String>>()
                     val parsedExtract = mutableListOf<List<AnnotatedString>>()
 
+                    ReferenceData.reset()
                     extractText.buildRefList() // Build refList for article
 
                     if (apiResponse != null)
@@ -473,10 +472,7 @@ class HomeScreenViewModel(
                             sections = articleSections
                         )
 
-                    // Reset refList
-                    refCount = 1
-                    refList.clear()
-                    refListCount.clear()
+                    ReferenceData.reset()
 
                     _homeScreenState.update { currentState ->
                         currentState.copy(isLoading = false)
@@ -783,9 +779,7 @@ class HomeScreenViewModel(
                     )
                 )
 
-                refCount = 1
-                refList.clear()
-                refListCount.clear()
+                ReferenceData.reset()
 
                 _homeScreenState.update { currentState ->
                     currentState.copy(

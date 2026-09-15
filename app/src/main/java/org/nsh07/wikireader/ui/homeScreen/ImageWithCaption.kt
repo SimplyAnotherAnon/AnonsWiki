@@ -53,7 +53,7 @@ fun SharedTransitionScope.ImageWithCaption(
     }
 
     if (!checkFirstImage || uriHigh == pageImageUri) {
-        val description = remember(text) { text.substringAfter('|', "").substringBefore('|') }
+        val description = remember(text) { imageCaption(text) }
         val invert = remember { text.contains("|invert") }
 
         FeedImage(
@@ -103,3 +103,17 @@ fun SharedTransitionScope.ImageWithCaption(
             )
     }
 }
+
+/**
+ * Extracts the caption from an image element built by
+ * [org.nsh07.wikireader.ui.homeScreen.viewModel.HomeScreenViewModel], which has already stripped
+ * the MediaWiki display options and left `[[File:name|caption`, plus a trailing `|invert` marker
+ * for images that should be colour-inverted in dark mode.
+ *
+ * The caption is everything after the file name, not just up to the next `|`: captions routinely
+ * contain wiki links and templates of their own, and stopping at the first pipe cuts about a third
+ * of Wikipedia's captions mid-link ("Einstein with [[Charlie Chaplin]] at the [[Hollywood, Los
+ * Angeles" …).
+ */
+internal fun imageCaption(text: String): String =
+    text.substringAfter('|', "").removeSuffix("|invert").trim()

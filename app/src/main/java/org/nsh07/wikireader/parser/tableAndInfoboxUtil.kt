@@ -385,5 +385,72 @@ suspend fun parseInfobox(
         )
     }
 
-    rows.fastFilter { !it.first.matches("Image|Caption|Alt|Alt .+".toRegex()) && it.second.isNotBlank() }
+    rows.fastFilter { (key, value) -> isReaderVisibleInfoboxRow(key.text, value.text) }
+}
+
+/**
+ * Chrome parameters: an image, a map, a flag, a signature and everything that positions or styles
+ * one. MediaWiki turns these into the picture at the top of the infobox, never into a labelled row.
+ */
+private val chromeParameter =
+    ("^(image|img|photo|picture|cover|logo|seal|flag|emblem|blank ?emblem|map|mapframe|signature" +
+            "|caption|alt|border|upright)").toRegex(RegexOption.IGNORE_CASE)
+
+/** Presentational suffixes, e.g. "Flag size", "Map caption", "Infobox width". */
+private val presentationSuffix =
+    ("(size|width|upright|align|alignment|style|colou?r|background|padding|border" +
+            "|px|pixels)$").toRegex(RegexOption.IGNORE_CASE)
+
+/**
+ * Bookkeeping parameters used by the chemistry and drug infoboxes to track which fields a bot has
+ * checked. They are invisible on Wikipedia.
+ */
+private val bookkeepingParameter =
+    ("^(verified ?fields|watched ?fields|verified ?revid|revid|embedded|child|module|nocat|noicon" +
+            "|index ?label|sortkey|template ?doc|demo)$").toRegex(RegexOption.IGNORE_CASE)
+
+/**
+ * Slots that only carry a footnote or an aside for a neighbouring field, e.g. "Legal US comment"
+ * next to "Legal US". On their own they render as a stray marker.
+ */
+private val footnoteSlot = "(ref|refs|comment|comments)$".toRegex(RegexOption.IGNORE_CASE)
+
+/** Values that switch a section of the template on or off rather than saying anything. */
+private val switchValue = "^(yes|no|y|n|on|off|true|false)$".toRegex(RegexOption.IGNORE_CASE)
+
+/**
+ * A value naming an image file. [org.nsh07.wikireader.ui.homeScreen.AsyncInfobox] renders these as
+ * pictures, so such a row is content however plumbing-like its parameter name looks — the album
+ * cover lives in `Cover`, the structural diagram in `ImageL`, the autograph in `Signature`.
+ */
+private val mediaValue =
+    "\\.(jpg|jpeg|png|svg|gif|webp)$".toRegex(RegexOption.IGNORE_CASE)
+
+/**
+ * Decides whether an infobox row is something Wikipedia would show a reader.
+ *
+ * [parseInfobox] reads every `|name = value` pair in the template, but a MediaWiki infobox only
+ * renders the parameters it has a label for; the rest drive images, layout and bot bookkeeping.
+ * Without the template definitions we cannot know the labelled set, so this drops the parameter
+ * shapes that are plumbing in every infobox family, and keeps everything else.
+ */
+internal fun isReaderVisibleInfoboxRow(key: String, value: String): Boolean {
+    // Trailing indices distinguish repeats ("Image2", "Alt2"), not different kinds of parameter.
+    val name = key.trim().trimEnd(*"0123456789".toCharArray()).trim()
+    if (name.isEmpty()) return false
+
+    val text = value.trim()
+    if (mediaValue.containsMatchIn(text) || text.matches("\\[\\[.{1,6}:.+]]".toRegex())) return true
+
+    if (chromeParameter.containsMatchIn(name)) return false
+    if (presentationSuffix.containsMatchIn(name)) return false
+    if (bookkeepingParameter.containsMatchIn(name)) return false
+    if (footnoteSlot.containsMatchIn(name)) return false
+
+    if (text.isEmpty()) return false
+    if (switchValue.matches(text)) return false
+    // Punctuation-only leftovers such as the ", " an empty template parameter list leaves behind.
+    if (text.none { it.isLetterOrDigit() }) return false
+
+    return true
 }
