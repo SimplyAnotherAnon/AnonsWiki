@@ -168,8 +168,8 @@ class HomeScreenViewModel(
             is HomeAction.MarkUserLanguageSelected -> markUserLanguageSelected(action.lang)
             is HomeAction.ReloadPage -> reloadPage(action.persistLang)
             is HomeAction.SaveArticle -> viewModelScope.launch {
-                if (backStack.last() is HomeSubscreen.Article) {
-                    val last = backStack.last() as HomeSubscreen.Article
+                val last = backStack.lastOrNull() as? HomeSubscreen.Article
+                if (last != null) {
                     if (last.savedStatus == SavedStatus.NOT_SAVED) {
                         val status = saveArticle()
                         if (status != WRStatus.SUCCESS)
@@ -201,12 +201,11 @@ class HomeScreenViewModel(
             is HomeAction.HideRef -> hideRef()
             is HomeAction.LoadRandom -> loadPage(title = null, random = true)
             is HomeAction.ScrollToTop -> viewModelScope.launch {
-                if (backStack.last() is HomeSubscreen.Article)
-                    (backStack[backStack.lastIndex] as HomeSubscreen.Article).listState.scrollToItem(
-                        0
-                    )
-                else if (backStack.last() is HomeSubscreen.Feed)
-                    (backStack[backStack.lastIndex] as HomeSubscreen.Feed).listState.scrollToItem(0)
+                when (val top = backStack.lastOrNull()) {
+                    is HomeSubscreen.Article -> top.listState.scrollToItem(0)
+                    is HomeSubscreen.Feed -> top.listState.scrollToItem(0)
+                    else -> {}
+                }
             }
 
             is HomeAction.ShowFeedErrorSnackBar -> viewModelScope.launch {
@@ -448,7 +447,7 @@ class HomeScreenViewModel(
                         }
                     }
 
-                    if (!replaceBackstackEntry) backStack.add(
+                    if (!replaceBackstackEntry || backStack.isEmpty()) backStack.add(
                         HomeSubscreen.Article(
                             title = apiResponse?.title ?: "Error",
                             photo = apiResponse?.photo,
@@ -485,7 +484,7 @@ class HomeScreenViewModel(
                 } catch (e: Exception) {
                     Log.e("ViewModel", "Error in fetching results: ${e.message}")
                     e.printStackTrace()
-                    backStack.add(
+                    val errorEntry =
                         HomeSubscreen.Article(
                             title = "Error",
                             extract = if (e.message?.contains("404") == true) {
@@ -507,7 +506,12 @@ class HomeScreenViewModel(
                             pageId = null,
                             savedStatus = SavedStatus.NOT_SAVED
                         )
-                    )
+                    if (replaceBackstackEntry && backStack.isNotEmpty())
+                        backStack[backStack.lastIndex] = errorEntry
+                    else backStack.add(errorEntry)
+                    _homeScreenState.update { currentState ->
+                        currentState.copy(isLoading = false)
+                    }
                 }
 
                 if (lang != null)
@@ -601,21 +605,26 @@ class HomeScreenViewModel(
 
                     feed = feed.copy(sections = sections)
 
-                    backStack[0] = feed
-                    if (backStack.size > 1) backStack.removeRange(1, backStack.size)
+                    if (backStack.isEmpty()) backStack.add(feed)
+                    else {
+                        backStack[0] = feed
+                        if (backStack.size > 1) backStack.removeRange(1, backStack.size)
+                    }
 
                     _homeScreenState.update { currentState ->
                         currentState.copy(isLoading = false)
                     }
                 } catch (e: Exception) {
                     Log.e("ViewModel", "Error in loading feed: ${e.message}")
-                    backStack[0] = HomeSubscreen.Logo
+                    if (backStack.isEmpty()) backStack.add(HomeSubscreen.Logo)
+                    else backStack[0] = HomeSubscreen.Logo
                     _homeScreenState.update { currentState ->
                         currentState.copy(isLoading = false)
                     }
                 }
             } else {
-                backStack[0] = HomeSubscreen.Logo
+                if (backStack.isEmpty()) backStack.add(HomeSubscreen.Logo)
+                else backStack[0] = HomeSubscreen.Logo
             }
         }
     }
@@ -632,15 +641,17 @@ class HomeScreenViewModel(
         val currentLang = lang ?: preferencesState.value.lang
         interceptor.setHost("${currentLang}.wikipedia.org")
 
+        val article = backStack.lastOrNull() as? HomeSubscreen.Article
+        if (article == null) {
+            Log.e("ViewModel", "Cannot save article, current screen is not an article")
+            interceptor.setHost("${preferencesState.value.lang}.wikipedia.org")
+            return WRStatus.OTHER
+        }
+
         try {
-            val lastIndex = backStack.lastIndex
+            setSavedStatus(SavedStatus.SAVING)
 
-            if (backStack[lastIndex] !is HomeSubscreen.Article) throw TypeCastException("BackStack entry is not an article")
-
-            backStack[lastIndex] =
-                (backStack[lastIndex] as HomeSubscreen.Article).copy(savedStatus = SavedStatus.SAVING)
-
-            val pageTitle = title ?: (backStack[lastIndex] as HomeSubscreen.Article).title
+            val pageTitle = title ?: article.title
             val apiResponse = wikipediaRepository
                 .getPageData(pageTitle)
 
@@ -669,18 +680,29 @@ class HomeScreenViewModel(
                 )
             )
 
-            backStack[lastIndex] =
-                (backStack[lastIndex] as HomeSubscreen.Article).copy(savedStatus = SavedStatus.SAVED)
+            setSavedStatus(SavedStatus.SAVED)
 
             return WRStatus.SUCCESS
         } catch (e: Exception) {
-            Log.e("ViewModel", "Cannot save article, network error")
+            Log.e("ViewModel", "Cannot save article: ${e.message}")
             e.printStackTrace()
-            if (e !is TypeCastException) backStack[backStack.lastIndex] =
-                (backStack.last() as HomeSubscreen.Article).copy(savedStatus = SavedStatus.NOT_SAVED)
+            setSavedStatus(SavedStatus.NOT_SAVED)
             interceptor.setHost("${preferencesState.value.lang}.wikipedia.org")
             return WRStatus.NETWORK_ERROR
         }
+    }
+
+    /**
+     * Updates the saved status of the article on top of the back stack, if there is one.
+     *
+     * Saving runs asynchronously, so the top entry can be gone (or no longer an article) by the
+     * time the result arrives. Indexing the back stack directly here used to throw out of the
+     * catch block in [saveArticle] and take the whole app down with it.
+     */
+    private fun setSavedStatus(status: SavedStatus) {
+        val lastIndex = backStack.lastIndex
+        val article = backStack.lastOrNull() as? HomeSubscreen.Article ?: return
+        backStack[lastIndex] = article.copy(savedStatus = status)
     }
 
     /**

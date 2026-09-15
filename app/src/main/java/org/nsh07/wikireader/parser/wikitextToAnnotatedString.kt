@@ -49,6 +49,123 @@ private val NUMBERED_PARAMETER = "^\\s*\\d+\\s*=\\s*".toRegex()
 
 private fun String.linkArgument(): String = replaceFirst(NUMBERED_PARAMETER, "").trim()
 
+/** Matches an ion charge such as `2+`, `+`, `3-` or `2−`. */
+private val CHEM_CHARGE = "^\\d*[+\u2212-]$".toRegex()
+
+/**
+ * Renders the body of a {{chem2}} template, the markup Wikipedia uses for inline chemical
+ * formulae and equations (e.g. `CaCO3`, `Ca(2+)`, `CaCO3*6H2O`, `CaCO3(s) -> CaO(s) + CO2(g)`).
+ *
+ * Digits that directly follow an element symbol or a closing bracket become subscripts, charges
+ * written in parentheses or trailing a symbol become superscripts, and the ASCII reaction arrows
+ * are replaced with their typographic equivalents.
+ */
+private fun AnnotatedString.Builder.appendChem2(formula: String, fontSize: Int) {
+    val subscript = SpanStyle(
+        baselineShift = BaselineShift.Subscript,
+        fontSize = (fontSize - 4).sp
+    )
+    val superscript = SpanStyle(
+        baselineShift = BaselineShift.Superscript,
+        fontSize = (fontSize - 4).sp
+    )
+
+    var i = 0
+    // Tracks the last character appended in normal script, so we can tell a subscript digit
+    // ("H2O") from a stoichiometric coefficient ("2 H2O"), and a charge ("H+") from a plus
+    // sign joining two species ("CaO + H2O").
+    var prev = ' '
+
+    fun attachesToPrevious() = prev.isLetterOrDigit() || prev == ')' || prev == ']'
+
+    fun appendArrow(arrow: Char, source: String, at: Int, length: Int) {
+        if (!prev.isWhitespace()) append(' ')
+        append(arrow)
+        if (source.getOrNull(at + length)?.isWhitespace() != true) append(' ')
+    }
+
+    while (i < formula.length) {
+        val c = formula[i]
+        when {
+            formula.startsWith("<=>", i) || formula.startsWith("<->", i) -> {
+                appendArrow('\u21cc', formula, i, 3); prev = ' '; i += 3
+            }
+
+            formula.startsWith("->", i) -> {
+                appendArrow('\u2192', formula, i, 2); prev = ' '; i += 2
+            }
+
+            formula.startsWith("<-", i) -> {
+                appendArrow('\u2190', formula, i, 2); prev = ' '; i += 2
+            }
+
+            c == '*' || c == '\u00b7' -> { // hydrate separator
+                append('\u00b7'); prev = '\u00b7'; i++
+            }
+
+            c == '(' -> {
+                val close = formula.indexOf(')', i)
+                val inner = if (close == -1) null else formula.substring(i + 1, close)
+                if (inner != null && inner.matches(CHEM_CHARGE)) {
+                    withStyle(superscript) { append(inner.replace('-', '\u2212')) }
+                    prev = ')'
+                    i = close + 1
+                } else {
+                    append('('); prev = '('; i++
+                }
+            }
+
+            c.isDigit() && attachesToPrevious() -> {
+                val digits = formula.substring(i).takeWhile { it.isDigit() }
+                withStyle(subscript) { append(digits) }
+                // A subscript does not itself anchor a following charge-less digit run.
+                prev = '0'
+                i += digits.length
+            }
+
+            (c == '+' || c == '-' || c == '\u2212') && attachesToPrevious() &&
+                    formula.getOrNull(i + 1)?.isLetterOrDigit() != true -> {
+                withStyle(superscript) { append(if (c == '-') '\u2212' else c) }
+                prev = c
+                i++
+            }
+
+            else -> {
+                append(c); prev = c; i++
+            }
+        }
+    }
+}
+
+/**
+ * Renders the parameters of the older {{chem}} template, where odd parameters are normal text and
+ * even ones are subscripts, except for charges (`2-`, `+`) which are superscripts regardless of
+ * position, e.g. `{{chem|SO|4|2-}}`.
+ */
+private fun AnnotatedString.Builder.appendChem(params: List<String>, fontSize: Int) {
+    params.fastForEachIndexed { index, raw ->
+        val param = raw.trim()
+        if (param.isEmpty() || '=' in param) return@fastForEachIndexed
+        when {
+            param.matches(CHEM_CHARGE) -> withStyle(
+                SpanStyle(
+                    baselineShift = BaselineShift.Superscript,
+                    fontSize = (fontSize - 4).sp
+                )
+            ) { append(param.replace('-', '\u2212')) }
+
+            index % 2 == 1 -> withStyle(
+                SpanStyle(
+                    baselineShift = BaselineShift.Subscript,
+                    fontSize = (fontSize - 4).sp
+                )
+            ) { append(param) }
+
+            else -> append(param)
+        }
+    }
+}
+
 private val HATNOTE_LABEL =
     "^l(\\d+)\\s*=\\s*(.*)$".toRegex(setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 private val NAMED_PARAMETER =
@@ -618,6 +735,19 @@ fun String.toWikitextAnnotatedString(
                                     }
                                 }
                                 append(toAdd)
+                            }
+
+                            // The pipe is required so that {{chembox}}, {{chem-stub}} and
+                            // friends do not get treated as inline formulae.
+                            currSubstring.startsWith("{{chem2|", ignoreCase = true) -> {
+                                appendChem2(
+                                    currSubstring.substringAfter('|').substringBefore('|'),
+                                    fontSize
+                                )
+                            }
+
+                            currSubstring.startsWith("{{chem|", ignoreCase = true) -> {
+                                appendChem(currSubstring.substringAfter('|').split('|'), fontSize)
                             }
 
                             currSubstring.startsWith("{{mono|", ignoreCase = true) -> {

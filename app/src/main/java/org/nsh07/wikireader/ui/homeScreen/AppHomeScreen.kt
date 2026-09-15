@@ -237,7 +237,9 @@ fun AppHomeScreen(
                 backStack = backStack,
                 onBack = {
                     onAction(HomeAction.StopAll)
-                    backStack.removeAt(backStack.lastIndex)
+                    // Keep the root entry: the feed, the view model and several composables all
+                    // read backStack[0], so an empty back stack crashes the app.
+                    if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
                 },
                 transitionSpec = { fadeIn().togetherWith(fadeOut()) },
                 popTransitionSpec = { fadeIn().togetherWith(fadeOut()) },

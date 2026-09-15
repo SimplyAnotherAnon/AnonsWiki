@@ -95,7 +95,7 @@ fun LazyItemScope.SearchHistoryListItem(
             ) {
                 Icon(
                     painterResource(R.drawable.north_west),
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.useSearchSuggestion)
                 )
             }
         },

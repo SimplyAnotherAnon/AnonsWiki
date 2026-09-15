@@ -102,9 +102,15 @@ fun AsyncWikitable(
                 modifier = Modifier.padding(8.dp)
             ) {
                 if (!expanded)
-                    Icon(painterResource(R.drawable.keyboard_arrow_down), contentDescription = null)
+                    Icon(
+                        painterResource(R.drawable.keyboard_arrow_down),
+                        contentDescription = stringResource(R.string.expandTable)
+                    )
                 else
-                    Icon(painterResource(R.drawable.keyboard_arrow_up), contentDescription = null)
+                    Icon(
+                        painterResource(R.drawable.keyboard_arrow_up),
+                        contentDescription = stringResource(R.string.collapseTable)
+                    )
             }
             Text(
                 rows.first.ifEmpty { tableTitle },

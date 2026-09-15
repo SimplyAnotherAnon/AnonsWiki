@@ -2,6 +2,7 @@ package org.nsh07.wikireader.data
 
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
@@ -162,6 +163,111 @@ class MiscKtTest {
         )
 
         assertEquals("February 4, 2022", result.text)
+    }
+
+    @Test
+    fun cleanUpWikitext_colonIndentedMath_becomesDisplayMath() {
+        // Regression test for upstream issue #307.
+        val input = ": <math>E = mc^2</math>\n:: <math>a^2 + b^2 = c^2</math>"
+
+        assertEquals(
+            "<math display=\"block\">E = mc^2</math>\n" +
+                    "<math display=\"block\">a^2 + b^2 = c^2</math>",
+            cleanUpWikitext(input)
+        )
+    }
+
+    @Test
+    fun cleanUpWikitext_colonIndentedMathWithDisplay_isLeftAlone() {
+        val input = ": <math display=\"inline\">E = mc^2</math>"
+
+        assertEquals(input, cleanUpWikitext(input))
+    }
+
+    @Test
+    fun toWikitextAnnotatedString_chem2Formula_rendersSubscripts() {
+        val result = "{{chem2|CaCO3}}".toWikitextAnnotatedString(
+            colorScheme = lightColorScheme(),
+            typography = Typography(),
+            loadPage = {},
+            fontSize = 16,
+            showRef = {}
+        )
+
+        assertEquals("CaCO3", result.text)
+        // The trailing 3 is the only subscripted run.
+        val subscripts = result.spanStyles
+            .filter { it.item.baselineShift == BaselineShift.Subscript }
+        assertEquals(1, subscripts.size)
+        assertEquals("3", result.text.substring(subscripts[0].start, subscripts[0].end))
+    }
+
+    @Test
+    fun toWikitextAnnotatedString_chem2Equation_rendersStatesChargesAndArrow() {
+        val result = "{{chem2|CaCO3(s) + 2 H+(aq) -> Ca(2+)(aq) + CO2(g) + H2O(l)}}"
+            .toWikitextAnnotatedString(
+                colorScheme = lightColorScheme(),
+                typography = Typography(),
+                loadPage = {},
+                fontSize = 16,
+                showRef = {}
+            )
+
+        // State symbols stay literal, the charge parentheses are dropped, "->" becomes an arrow.
+        assertEquals("CaCO3(s) + 2 H+(aq) \u2192 Ca2+(aq) + CO2(g) + H2O(l)", result.text)
+
+        val superscripts = result.spanStyles
+            .filter { it.item.baselineShift == BaselineShift.Superscript }
+            .map { result.text.substring(it.start, it.end) }
+        assertEquals(listOf("+", "2+"), superscripts)
+    }
+
+    @Test
+    fun toWikitextAnnotatedString_chem2Hydrate_usesMiddleDot() {
+        val result = "{{chem2|CaCO3*6H2O}}".toWikitextAnnotatedString(
+            colorScheme = lightColorScheme(),
+            typography = Typography(),
+            loadPage = {},
+            fontSize = 16,
+            showRef = {}
+        )
+
+        assertEquals("CaCO3\u00b76H2O", result.text)
+    }
+
+    @Test
+    fun toWikitextAnnotatedString_chemTemplate_superscriptsCharge() {
+        val result = "{{chem|SO|4|2-}}".toWikitextAnnotatedString(
+            colorScheme = lightColorScheme(),
+            typography = Typography(),
+            loadPage = {},
+            fontSize = 16,
+            showRef = {}
+        )
+
+        assertEquals("SO42\u2212", result.text)
+        val subscripts = result.spanStyles
+            .filter { it.item.baselineShift == BaselineShift.Subscript }
+            .map { result.text.substring(it.start, it.end) }
+        val superscripts = result.spanStyles
+            .filter { it.item.baselineShift == BaselineShift.Superscript }
+            .map { result.text.substring(it.start, it.end) }
+        assertEquals(listOf("4"), subscripts)
+        assertEquals(listOf("2\u2212"), superscripts)
+    }
+
+    @Test
+    fun toWikitextAnnotatedString_chemboxTemplate_isNotTreatedAsFormula() {
+        // {{chembox}} shares the {{chem prefix but is an infobox, not an inline formula.
+        val result = "{{chembox|Name = Calcium carbonate}}".toWikitextAnnotatedString(
+            colorScheme = lightColorScheme(),
+            typography = Typography(),
+            loadPage = {},
+            fontSize = 16,
+            showRef = {}
+        )
+
+        assertEquals("", result.text)
     }
 
     @Test

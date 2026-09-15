@@ -52,6 +52,19 @@ fun ArticleLanguageBottomSheet(
     val articleLangs =
         remember(recentLangs, langs) { langs.partition { it.lang in recentLangs } }
 
+    // Resolve the display names and apply the filter up front. Filtering inside the item lambda
+    // instead leaves one zero-height lazy item per non-matching language; with 300+ Wikipedia
+    // languages that makes the list compose almost every entry to fill the viewport and the
+    // sheet visibly flickers while typing.
+    val recentMatches = remember(articleLangs.first, searchQuery) {
+        articleLangs.first.mapNotNull { it.withDisplayName() }
+            .filter { (_, name) -> name.contains(searchQuery, ignoreCase = true) }
+    }
+    val otherMatches = remember(articleLangs.second, searchQuery) {
+        articleLangs.second.mapNotNull { it.withDisplayName() }
+            .filter { (_, name) -> name.contains(searchQuery, ignoreCase = true) }
+    }
+
     ModalBottomSheet(
         onDismissRequest = {
             setShowSheet(false)
@@ -108,7 +121,7 @@ fun ArticleLanguageBottomSheet(
                             }
                     }
                 }
-                if (articleLangs.first.isNotEmpty()) {
+                if (recentMatches.isNotEmpty()) {
                     item {
                         Text(
                             stringResource(R.string.recentLanguages),
@@ -117,36 +130,28 @@ fun ArticleLanguageBottomSheet(
                         )
                     }
                     itemsIndexed(
-                        articleLangs.first,
-                        key = { index: Int, it: WikiLang -> "recent-" + it.lang }
-                    ) { index, it ->
-                        val langName: String? = try {
-                            langCodeToName(it.lang)
-                        } catch (_: Exception) {
-                            Log.e("Language", "Language not found: ${it.lang}")
-                            null
-                        }
-                        if (langName != null && langName.contains(searchQuery, ignoreCase = true)) {
-                            LanguageListItem(
-                                headlineContent = { Text(langName) },
-                                supportingContent = { Text(it.title) },
-                                selected = false,
-                                items = articleLangs.first.size,
-                                index = index
-                            ) {
-                                setLang(it.lang)
-                                loadPage(it.title)
-                                scope
-                                    .launch { bottomSheetState.hide() }
-                                    .invokeOnCompletion {
-                                        if (!bottomSheetState.isVisible) {
-                                            setShowSheet(false)
-                                            setSearchStr("")
-                                        }
+                        recentMatches,
+                        key = { _: Int, it: Pair<WikiLang, String> -> "recent-" + it.first.lang }
+                    ) { index, (wikiLang, langName) ->
+                        LanguageListItem(
+                            headlineContent = { Text(langName) },
+                            supportingContent = { Text(wikiLang.title) },
+                            selected = false,
+                            items = recentMatches.size,
+                            index = index
+                        ) {
+                            setLang(wikiLang.lang)
+                            loadPage(wikiLang.title)
+                            scope
+                                .launch { bottomSheetState.hide() }
+                                .invokeOnCompletion {
+                                    if (!bottomSheetState.isVisible) {
+                                        setShowSheet(false)
+                                        setSearchStr("")
                                     }
-                            }
-                            Spacer(Modifier.height(2.dp))
+                                }
                         }
+                        Spacer(Modifier.height(2.dp))
                     }
                 }
                 item {
@@ -162,35 +167,28 @@ fun ArticleLanguageBottomSheet(
                     )
                 }
                 itemsIndexed(
-                    articleLangs.second,
-                    key = { index: Int, it: WikiLang -> it.lang }) { index, it ->
-                    val langName: String? = try {
-                        langCodeToName(it.lang)
-                    } catch (_: Exception) {
-                        Log.e("Language", "Language not found: ${it.lang}")
-                        null
-                    }
-                    if (langName != null && langName.contains(searchQuery, ignoreCase = true)) {
-                        LanguageListItem(
-                            headlineContent = { Text(langName) },
-                            supportingContent = { Text(it.title) },
-                            selected = false,
-                            items = articleLangs.second.size,
-                            index = index
-                        ) {
-                            setLang(it.lang)
-                            loadPage(it.title)
-                            scope
-                                .launch { bottomSheetState.hide() }
-                                .invokeOnCompletion {
-                                    if (!bottomSheetState.isVisible) {
-                                        setShowSheet(false)
-                                        setSearchStr("")
-                                    }
+                    otherMatches,
+                    key = { _: Int, it: Pair<WikiLang, String> -> it.first.lang }
+                ) { index, (wikiLang, langName) ->
+                    LanguageListItem(
+                        headlineContent = { Text(langName) },
+                        supportingContent = { Text(wikiLang.title) },
+                        selected = false,
+                        items = otherMatches.size,
+                        index = index
+                    ) {
+                        setLang(wikiLang.lang)
+                        loadPage(wikiLang.title)
+                        scope
+                            .launch { bottomSheetState.hide() }
+                            .invokeOnCompletion {
+                                if (!bottomSheetState.isVisible) {
+                                    setShowSheet(false)
+                                    setSearchStr("")
                                 }
-                        }
-                        Spacer(Modifier.height(2.dp))
+                            }
                     }
+                    Spacer(Modifier.height(2.dp))
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -199,4 +197,14 @@ fun ArticleLanguageBottomSheet(
     LaunchedEffect(searchQuery) {
         listState.scrollToItem(0)
     }
+}
+
+/**
+ * Pairs a [WikiLang] with its human-readable language name, or `null` if the code is unknown.
+ */
+private fun WikiLang.withDisplayName(): Pair<WikiLang, String>? = try {
+    this to langCodeToName(lang)
+} catch (_: Exception) {
+    Log.e("Language", "Language not found: $lang")
+    null
 }

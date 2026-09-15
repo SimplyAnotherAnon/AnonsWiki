@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.nsh07.wikireader.network.WikipediaApiService
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 internal val sectionTransclusion =
     "\\{\\{#section:\\s*([^|}]+)\\|\\s*([^}]+)\\}\\}".toRegex(RegexOption.IGNORE_CASE)
@@ -18,8 +19,10 @@ interface WikipediaRepository {
     suspend fun getPageContent(title: String): String
     suspend fun getRandomResult(): WikiApiPageData
     suspend fun getFeed(
+        // Locale.ROOT keeps the date ASCII: the value goes straight into the feed URL, and
+        // locales that default to non-Latin digits would otherwise build an invalid path.
         date: String = LocalDate.now()
-            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
+            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.ROOT))
     ): FeedApiResponse
 }
 

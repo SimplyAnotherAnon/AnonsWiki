@@ -256,7 +256,7 @@ fun AppSearchBar(
                         ) {
                             Icon(
                                 painterResource(R.drawable.search),
-                                contentDescription = null
+                                contentDescription = stringResource(R.string.search)
                             )
                         }
                 }
@@ -275,7 +275,7 @@ fun AppSearchBar(
             ) {
                 Icon(
                     painterResource(R.drawable.shuffle),
-                    contentDescription = null
+                    contentDescription = stringResource(R.string.randomArticle)
                 )
             }
         },
@@ -446,7 +446,7 @@ fun AppSearchBar(
                                             leadingIcon = {
                                                 Icon(
                                                     painterResource(R.drawable.add),
-                                                    "Add language"
+                                                    stringResource(R.string.addLanguage)
                                                 )
                                             },
                                             selected = false,
@@ -646,7 +646,10 @@ fun AppSearchBar(
                                         onClick = { setShowLanguageSheet(true) },
                                         label = {},
                                         leadingIcon = {
-                                            Icon(painterResource(R.drawable.add), "Add language")
+                                            Icon(
+                                                painterResource(R.drawable.add),
+                                                stringResource(R.string.addLanguage)
+                                            )
                                         },
                                         selected = false,
                                         modifier = Modifier.width(40.dp)

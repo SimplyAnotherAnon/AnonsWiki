@@ -63,6 +63,19 @@ fun LanguageBottomSheet(
         ).fastAll { it != null }
     )
     var selectedOption by remember { mutableStateOf(langCodeToName(lang)) }
+
+    // Filter before building the lazy items. Filtering inside the item lambda leaves a
+    // zero-height item behind for every one of the 300+ languages that does not match, which
+    // makes the list compose nearly all of them to fill the viewport and flicker while typing.
+    val recentMatches = remember(recentLangs, searchQuery) {
+        recentLangs.filter { it.contains(searchQuery, ignoreCase = true) }
+    }
+    val otherMatches = remember(searchQuery) {
+        langNames.withIndex()
+            .filter { (_, name) -> name.contains(searchQuery, ignoreCase = true) }
+            .map { (index, name) -> Triple(langCodes[index], name, wikipediaNames[index]) }
+    }
+
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val bottomSheetState = rememberModalBottomSheetState()
@@ -94,7 +107,7 @@ fun LanguageBottomSheet(
                     .padding(horizontal = 16.dp)
                     .clip(shapes.largeIncreased)
             ) {
-                if (recentLangs.isNotEmpty() && searchQuery.isEmpty()) {
+                if (recentMatches.isNotEmpty() && searchQuery.isEmpty()) {
                     item {
                         Text(
                             stringResource(R.string.recentLanguages),
@@ -103,81 +116,28 @@ fun LanguageBottomSheet(
                         )
                     }
                     itemsIndexed(
-                        recentLangs,
+                        recentMatches,
                         key = { _: Int, it: String -> it }
                     ) { index: Int, it: String ->
-                        if (it.contains(searchQuery, ignoreCase = true)) {
-                            val langName = remember(it) { langCodeToName(it) }
-                            val selected = selectedOption == langName
-                            LanguageListItem(
-                                headlineContent = {
-                                    Text(langName)
-                                },
-                                supportingContent = { Text(remember(it) { langCodeToWikiName(it) }) },
-                                selected = selected,
-                                items = recentLangs.size,
-                                index = index
-                            ) {
-                                setLang(it)
-                                scope
-                                    .launch {
-                                        if (userLanguageSelectionMode) {
-                                            insertUserLanguage?.invoke(
-                                                UserLanguage(
-                                                    it,
-                                                    langName,
-                                                    true
-                                                )
-                                            )
-                                        }
-                                        bottomSheetState.hide()
-                                    }
-                                    .invokeOnCompletion {
-                                        if (!bottomSheetState.isVisible) {
-                                            setShowSheet(false)
-                                            setSearchStr("")
-                                        }
-                                    }
-                            }
-                            Spacer(Modifier.height(2.dp))
-                        }
-                    }
-                }
-                item {
-                    Text(
-                        stringResource(R.string.otherLanguages),
-                        style = typography.titleSmall,
-                        modifier = Modifier.padding(
-                            top = 14.dp,
-                            bottom = 16.dp,
-                            start = 16.dp,
-                            end = 16.dp
-                        )
-                    )
-                }
-                itemsIndexed(
-                    langNames,
-                    key = { _: Int, it: String -> it }
-                ) { index: Int, it: String ->
-                    if (it.contains(searchQuery, ignoreCase = true)) {
-                        val selected = selectedOption == it
+                        val langName = remember(it) { langCodeToName(it) }
+                        val selected = selectedOption == langName
                         LanguageListItem(
                             headlineContent = {
-                                Text(it)
+                                Text(langName)
                             },
-                            supportingContent = { Text(wikipediaNames[index]) },
+                            supportingContent = { Text(remember(it) { langCodeToWikiName(it) }) },
                             selected = selected,
-                            items = langNames.size,
+                            items = recentMatches.size,
                             index = index
                         ) {
-                            setLang(langCodes[index])
+                            setLang(it)
                             scope
                                 .launch {
                                     if (userLanguageSelectionMode) {
                                         insertUserLanguage?.invoke(
                                             UserLanguage(
-                                                langCodes[index],
                                                 it,
+                                                langName,
                                                 true
                                             )
                                         )
@@ -193,6 +153,55 @@ fun LanguageBottomSheet(
                         }
                         Spacer(Modifier.height(2.dp))
                     }
+                }
+                item {
+                    Text(
+                        stringResource(R.string.otherLanguages),
+                        style = typography.titleSmall,
+                        modifier = Modifier.padding(
+                            top = 14.dp,
+                            bottom = 16.dp,
+                            start = 16.dp,
+                            end = 16.dp
+                        )
+                    )
+                }
+                itemsIndexed(
+                    otherMatches,
+                    key = { _: Int, it: Triple<String, String, String> -> it.second }
+                ) { index: Int, (langCode, langName, wikipediaName) ->
+                    val selected = selectedOption == langName
+                    LanguageListItem(
+                        headlineContent = {
+                            Text(langName)
+                        },
+                        supportingContent = { Text(wikipediaName) },
+                        selected = selected,
+                        items = otherMatches.size,
+                        index = index
+                    ) {
+                        setLang(langCode)
+                        scope
+                            .launch {
+                                if (userLanguageSelectionMode) {
+                                    insertUserLanguage?.invoke(
+                                        UserLanguage(
+                                            langCode,
+                                            langName,
+                                            true
+                                        )
+                                    )
+                                }
+                                bottomSheetState.hide()
+                            }
+                            .invokeOnCompletion {
+                                if (!bottomSheetState.isVisible) {
+                                    setShowSheet(false)
+                                    setSearchStr("")
+                                }
+                            }
+                    }
+                    Spacer(Modifier.height(2.dp))
                 }
             }
             Spacer(Modifier.weight(1f))
