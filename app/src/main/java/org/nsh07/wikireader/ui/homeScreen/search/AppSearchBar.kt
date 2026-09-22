@@ -101,6 +101,7 @@ import org.nsh07.wikireader.ui.image.FeedImage
 import org.nsh07.wikireader.ui.settingsScreen.LanguageBottomSheet
 import org.nsh07.wikireader.ui.settingsScreen.viewModel.PreferencesState
 import org.nsh07.wikireader.ui.settingsScreen.viewModel.SettingsAction
+import org.nsh07.wikireader.data.langCodeToName
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -460,6 +461,17 @@ fun AppSearchBar(
                                 key = { "${it.title}-prefix" }
                             ) {
                                 ListItem(
+                                    overlineContent = it.lang?.let { lang ->
+                                        {
+                                            Text(
+                                                langCodeToName(lang),
+                                                style = typography.labelSmall,
+                                                color = colorScheme.primary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    },
                                     headlineContent = {
                                         Text(
                                             it.title,
@@ -499,7 +511,9 @@ fun AppSearchBar(
                                         .clickable(
                                             onClick = {
                                                 onSearchBarExpandedChange(false)
-                                                onAction(HomeAction.LoadPage(it.title))
+                                                onAction(
+                                                    HomeAction.LoadPage(it.title, lang = it.lang)
+                                                )
                                             }
                                         )
                                         .animateItem()
@@ -560,7 +574,9 @@ fun AppSearchBar(
                                         .clickable(
                                             onClick = {
                                                 onSearchBarExpandedChange(false)
-                                                onAction(HomeAction.LoadPage(it.title))
+                                                onAction(
+                                                    HomeAction.LoadPage(it.title, lang = it.lang)
+                                                )
                                             }
                                         )
                                         .animateItem()

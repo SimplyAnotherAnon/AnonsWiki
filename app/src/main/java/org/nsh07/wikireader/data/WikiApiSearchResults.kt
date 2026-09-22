@@ -17,12 +17,14 @@ data class WikiSearchResultsQuery(
 data class WikiSearchResult(
     val ns: Int = 0,
     val title: String,
-    @SerialName("titlesnippet") val titleSnippet: String,
+    @SerialName("titlesnippet") val titleSnippet: String = "",
     @SerialName("pageid") val pageId: Int,
-    val snippet: String,
+    val snippet: String = "",
     val index: Int,
     @SerialName("redirecttitle") val redirectTitle: String? = null,
-    val thumbnail: WikiPhoto? = null
+    val thumbnail: WikiPhoto? = null,
+    /** The wiki this result came from, or null for the one currently being read. */
+    val lang: String? = null
 )
 
 @Serializable
@@ -42,10 +44,12 @@ data class WikiPrefixSearchResult(
     val title: String,
     val index: Int,
     val thumbnail: WikiPhoto? = null,
-    val terms: WikiPrefixSearchPageTerms? = null
+    val terms: WikiPrefixSearchPageTerms? = null,
+    /** The wiki this result came from, or null for the one currently being read. */
+    val lang: String? = null
 )
 
 @Serializable
 data class WikiPrefixSearchPageTerms(
-    val description: List<String>
+    val description: List<String> = emptyList()
 )

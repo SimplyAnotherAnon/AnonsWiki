@@ -51,6 +51,12 @@ import org.nsh07.wikireader.data.WikiApiPageData
 import org.nsh07.wikireader.data.WikipediaRepository
 import org.nsh07.wikireader.data.langCodeToName
 import org.nsh07.wikireader.data.parseSections
+import org.nsh07.wikireader.data.PSYCHONAUT_WIKI_HOST
+import org.nsh07.wikireader.data.PSYCHONAUT_WIKI_LANG
+import org.nsh07.wikireader.data.WikiPrefixSearchResult
+import org.nsh07.wikireader.data.WikiSearchResult
+import org.nsh07.wikireader.data.isPsychonautWiki
+import org.nsh07.wikireader.data.wikiHost
 import org.nsh07.wikireader.network.HostSelectionInterceptor
 import org.nsh07.wikireader.network.NetworkException
 import org.nsh07.wikireader.parser.ReferenceData
@@ -170,7 +176,7 @@ class HomeScreenViewModel(
                 val last = backStack.lastOrNull() as? HomeSubscreen.Article
                 if (last != null) {
                     if (last.savedStatus == SavedStatus.NOT_SAVED) {
-                        val status = saveArticle()
+                        val status = saveArticle(lang = last.currentLang)
                         if (status != WRStatus.SUCCESS)
                             snackBarHostState.showSnackbar(
                                 String.format(action.unableToSaveError, status.name)
@@ -179,7 +185,7 @@ class HomeScreenViewModel(
                     } else if (last.savedStatus == SavedStatus.SAVED) {
                         val status = deleteArticle(
                             pageId = last.pageId ?: 0,
-                            lang = preferencesState.value.lang
+                            lang = last.currentLang ?: preferencesState.value.lang
                         )
                         if (status != WRStatus.SUCCESS)
                             snackBarHostState.showSnackbar(
@@ -225,15 +231,27 @@ class HomeScreenViewModel(
 
     private suspend fun loadSearchResults(query: String, lang: String? = null) {
         val q = query.trim()
-        val host = lang?.let { "$it.wikipedia.org" }
+        val host = lang?.let { wikiHost(it) }
+        val searchingPsychonautWiki = isPsychonautWiki(lang ?: preferencesState.value.lang)
         if (q.isNotEmpty()) {
             try {
+                // PsychonautWiki is searched alongside the wiki being read and listed first, so
+                // its coverage of a substance surfaces even from an ordinary Wikipedia search.
+                val psychonautPrefix =
+                    if (searchingPsychonautWiki) emptyList()
+                    else psychonautWikiPrefixResults(q)
+
                 val prefixSearchResults = wikipediaRepository.getPrefixSearchResults(q, host)
                 _appSearchBarState.update { currentState ->
                     currentState.copy(
-                        prefixSearchResults = prefixSearchResults.query.pages.sortedBy { it.index }
+                        prefixSearchResults = psychonautPrefix +
+                                prefixSearchResults.query.pages.sortedBy { it.index }
                     )
                 }
+
+                val psychonautFull =
+                    if (searchingPsychonautWiki) emptyList()
+                    else psychonautWikiSearchResults(q)
 
                 val searchResults = wikipediaRepository.getSearchResults(q, host)
                 val results = searchResults.query.pages.sortedBy { it.index }
@@ -247,7 +265,7 @@ class HomeScreenViewModel(
                 }
                 _appSearchBarState.update { currentState ->
                     currentState.copy(
-                        searchResults = resultsParsed
+                        searchResults = psychonautFull + resultsParsed
                     )
                 }
             } catch (_: Exception) {
@@ -260,6 +278,36 @@ class HomeScreenViewModel(
             }
         } else clearSearchResults()
     }
+
+    /**
+     * Prefix-search results from PsychonautWiki, tagged with its code so opening one routes every
+     * request for that article to PsychonautWiki instead of Wikipedia.
+     *
+     * A failure here is not an error: PsychonautWiki being unreachable must not stop the search
+     * the reader actually asked for.
+     */
+    private suspend fun psychonautWikiPrefixResults(query: String): List<WikiPrefixSearchResult> =
+        try {
+            wikipediaRepository.getPrefixSearchResults(query, PSYCHONAUT_WIKI_HOST)
+                .query.pages
+                .sortedBy { it.index }
+                .map { it.copy(lang = PSYCHONAUT_WIKI_LANG) }
+        } catch (e: Exception) {
+            Log.e("ViewModel", "PsychonautWiki search failed: ${e.message}")
+            emptyList()
+        }
+
+    /** Full-text results from PsychonautWiki, tagged the same way as the suggestions. */
+    private suspend fun psychonautWikiSearchResults(query: String): List<WikiSearchResult> =
+        try {
+            wikipediaRepository.getSearchResults(query, PSYCHONAUT_WIKI_HOST)
+                .query.pages
+                .sortedBy { it.index }
+                .map { it.copy(lang = PSYCHONAUT_WIKI_LANG) }
+        } catch (e: Exception) {
+            Log.e("ViewModel", "PsychonautWiki search failed: ${e.message}")
+            emptyList()
+        }
 
     private fun clearSearchResults() {
         _appSearchBarState.update { currentState ->
@@ -287,8 +335,10 @@ class HomeScreenViewModel(
                 var setLang = preferencesState.value.lang
                 try {
                     if (lang != null) {
-                        interceptor.setHost("$lang.wikipedia.org")
                         setLang = lang
+                        // A wiki that is not a Wikipedia language is somewhere the reader is
+                        // visiting, not the language they read in: leave the app-wide host alone.
+                        if (!isPsychonautWiki(lang)) interceptor.setHost(wikiHost(lang))
                     }
                     _homeScreenState.update { currentState ->
                         currentState.copy(isLoading = true, loadingProgress = null)
@@ -310,9 +360,9 @@ class HomeScreenViewModel(
                         // Indexing straight into searchResults used to throw when a query matched
                         // nothing, and the catch below reports any non-network failure as "no
                         // search results", so a genuine bug looked like an empty search.
-                        val title = prefixResults.firstOrNull()?.title
-                            ?: searchResults.firstOrNull()?.title
-                        if (title != null) loadPage(title = title, lang = setLang)
+                        val first = prefixResults.firstOrNull()?.let { it.title to it.lang }
+                            ?: searchResults.firstOrNull()?.let { it.title to it.lang }
+                        if (first != null) loadPage(title = first.first, lang = first.second ?: setLang)
                         else showNoSearchResults(q, setLang)
                     } else
                         loadPage(title = null, random = true)
@@ -376,8 +426,10 @@ class HomeScreenViewModel(
             if (title != null || random) {
                 try {
                     if (lang != null) {
-                        interceptor.setHost("$lang.wikipedia.org")
                         setLang = lang
+                        // A wiki that is not a Wikipedia language is somewhere the reader is
+                        // visiting, not the language they read in: leave the app-wide host alone.
+                        if (!isPsychonautWiki(lang)) interceptor.setHost(wikiHost(lang))
                     }
                     if (title != null) {
                         lastQuery = Pair(title, setLang)
@@ -386,7 +438,7 @@ class HomeScreenViewModel(
                         currentState.copy(isLoading = true, loadingProgress = null)
                     }
 
-                    val host = "$setLang.wikipedia.org"
+                    val host = wikiHost(setLang)
                     val apiResponse = when {
                         !random && title != null -> wikipediaRepository
                             .getPageData(title, host)
@@ -515,7 +567,7 @@ class HomeScreenViewModel(
                     }
                 }
 
-                if (lang != null)
+                if (lang != null && !isPsychonautWiki(lang))
                     preferencesStateMutableFlow.update { currentState ->
                         currentState.copy(lang = lang)
                     }
@@ -573,7 +625,7 @@ class HomeScreenViewModel(
 
                 try {
                     val feedData = wikipediaRepository
-                        .getFeed(host = "${preferencesState.value.lang}.wikipedia.org")
+                        .getFeed(host = wikiHost(preferencesState.value.lang))
                     val sections = mutableListOf<Pair<Int, FeedSection>>()
                     var currentSection = 0
 
@@ -644,7 +696,7 @@ class HomeScreenViewModel(
         // Pinned to this request rather than set on the shared interceptor: saving runs alongside
         // whatever the reader is doing, and swapping the app-wide host sent any page load in
         // flight to the wrong Wikipedia.
-        val host = "${'$'}currentLang.wikipedia.org"
+        val host = wikiHost(currentLang)
 
         val article = backStack.lastOrNull() as? HomeSubscreen.Article
         if (article == null) {
@@ -872,7 +924,7 @@ class HomeScreenViewModel(
             appDatabaseRepository.deselectAllUserLanguages()
             appDatabaseRepository.markUserLanguageSelected(lang)
         }
-        interceptor.setHost("$lang.wikipedia.org")
+        interceptor.setHost(wikiHost(lang))
         preferencesStateMutableFlow.update { currentState ->
             currentState.copy(lang = lang)
         }

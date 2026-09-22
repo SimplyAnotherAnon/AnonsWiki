@@ -18,6 +18,7 @@ import org.nsh07.wikireader.WikiReaderApplication
 import org.nsh07.wikireader.data.AppDatabaseRepository
 import org.nsh07.wikireader.data.AppStatus
 import org.nsh07.wikireader.data.PreferencesRepository
+import org.nsh07.wikireader.data.wikiHost
 import org.nsh07.wikireader.network.HostSelectionInterceptor
 
 class SettingsViewModel(
@@ -91,7 +92,7 @@ class SettingsViewModel(
             appDatabaseRepository.deleteOldSearchHistory()
             appDatabaseRepository.deleteOldViewHistory()
 
-            interceptor.setHost("$lang.wikipedia.org")
+            interceptor.setHost(wikiHost(lang))
 
             appStatusFlow.update { AppStatus.INITIALIZED }
         }
@@ -122,7 +123,7 @@ class SettingsViewModel(
 
             is SettingsAction.SaveLang -> {
                 val lang = action.value
-                interceptor.setHost("$lang.wikipedia.org")
+                interceptor.setHost(wikiHost(lang))
                 preferencesStateMutableFlow.update { currentState ->
                     currentState.copy(lang = lang)
                 }

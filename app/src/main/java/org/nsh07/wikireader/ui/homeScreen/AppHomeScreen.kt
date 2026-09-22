@@ -93,6 +93,7 @@ import org.nsh07.wikireader.ui.settingsScreen.viewModel.PreferencesState
 import org.nsh07.wikireader.ui.settingsScreen.viewModel.SettingsAction
 import org.nsh07.wikireader.ui.shimmer.AnimatedShimmer
 import org.nsh07.wikireader.ui.shimmer.FeedLoader
+import org.nsh07.wikireader.data.wikiArticleUrl
 
 /**
  * The main composable function for the app's home screen.
@@ -144,13 +145,16 @@ fun AppHomeScreen(
     val sendIntent: Intent = remember(backStack.last(), preferencesState.lang) {
         Intent()
             .apply {
-                val isArticle = backStack.last() is HomeSubscreen.Article
+                val article = backStack.lastOrNull() as? HomeSubscreen.Article
                 action = Intent.ACTION_SEND
+                // The article's own wiki, not the reading language: a PsychonautWiki article
+                // shared as a Wikipedia link would point at a page that does not exist.
+                val lang = article?.currentLang ?: preferencesState.lang
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    if (isArticle) "https://${preferencesState.lang}.wikipedia.org/wiki/${
-                        (backStack.last() as HomeSubscreen.Article).title.replace(' ', '_')
-                    }" else "https://${preferencesState.lang}.wikipedia.org/wiki/Main_Page"
+                    if (article != null)
+                        wikiArticleUrl(lang, article.title.replace(' ', '_'))
+                    else wikiArticleUrl(lang, "Main_Page")
                 )
                 type = "text/plain"
             }

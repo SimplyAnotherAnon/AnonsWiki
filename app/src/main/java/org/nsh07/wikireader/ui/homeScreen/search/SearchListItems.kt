@@ -39,6 +39,11 @@ import org.nsh07.wikireader.data.WikiSearchResult
 import org.nsh07.wikireader.ui.homeScreen.viewModel.HomeAction
 import org.nsh07.wikireader.ui.image.FeedImage
 import org.nsh07.wikireader.ui.theme.CustomColors.listItemColors
+import androidx.compose.material3.MaterialTheme.colorScheme
+import androidx.compose.material3.MaterialTheme.typography
+import org.nsh07.wikireader.data.langCodeToName
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -164,16 +169,19 @@ fun LazyItemScope.PrefixSearchResultListItem(
                 overflow = TextOverflow.Ellipsis
             )
         },
-        supportingContent = if (item.terms != null) {
+        overlineContent = item.lang?.let { lang ->
+            { WikiSourceLabel(lang) }
+        },
+        supportingContent = item.terms?.description?.firstOrNull()?.let { description ->
             {
                 Text(
-                    item.terms.description[0],
+                    description,
                     softWrap = true,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-        } else null,
+        },
         trailingContent = {
             if (item.thumbnail != null && !dataSaver)
                 FeedImage(
@@ -202,7 +210,7 @@ fun LazyItemScope.PrefixSearchResultListItem(
             .clickable(
                 onClick = {
                     onSearchBarExpandedChange(false)
-                    onAction(HomeAction.LoadPage(item.title))
+                    onAction(HomeAction.LoadPage(item.title, lang = item.lang))
                 },
                 interactionSource = interactionSource
             )
@@ -243,16 +251,20 @@ fun LazyItemScope.SearchResultListItem(
     )
 
     ListItem(
-        overlineContent = if (it.redirectTitle != null) {
+        overlineContent = if (it.lang != null || it.redirectTitle != null) {
             {
-                Text(
-                    stringResource(
-                        R.string.redirectedFrom,
-                        it.redirectTitle
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (it.lang != null) {
+                        WikiSourceLabel(it.lang)
+                        if (it.redirectTitle != null) Text(" · ", style = typography.labelSmall)
+                    }
+                    if (it.redirectTitle != null)
+                        Text(
+                            stringResource(R.string.redirectedFrom, it.redirectTitle),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                }
             }
         } else null,
         headlineContent = {
@@ -300,10 +312,25 @@ fun LazyItemScope.SearchResultListItem(
             .clickable(
                 onClick = {
                     onSearchBarExpandedChange(false)
-                    onAction(HomeAction.LoadPage(it.title))
+                    onAction(HomeAction.LoadPage(it.title, lang = it.lang))
                 },
                 interactionSource = interactionSource
             )
             .animateItem()
+    )
+}
+
+/**
+ * Marks a search result that came from a wiki other than the one being read, so PsychonautWiki
+ * results are recognisable at a glance without looking any different once opened.
+ */
+@Composable
+private fun WikiSourceLabel(lang: String) {
+    Text(
+        langCodeToName(lang),
+        style = typography.labelSmall,
+        color = colorScheme.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
     )
 }

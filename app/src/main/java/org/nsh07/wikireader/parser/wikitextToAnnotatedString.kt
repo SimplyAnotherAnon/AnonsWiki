@@ -1609,8 +1609,14 @@ fun String.toWikitextAnnotatedString(
                     if (input.getOrNull(i + 1) == '[') {
                         val curr = input.substring(i + 2).substringBefore("]]")
                         if (!curr.startsWith("File:", ignoreCase = true)) {
+                            // Semantic MediaWiki annotates links as [[property::value]], which
+                            // PsychonautWiki uses heavily; only the value is shown. The leading
+                            // colon of [[:Category:X]] is markup too, and was being shown when
+                            // the link had no separate label.
                             val rawTarget = curr.substringBefore('|')
-                            val target = rawTarget.linkArgument().removePrefix(":")
+                                .substringAfterLast("::")
+                                .removePrefix(":")
+                            val target = rawTarget.linkArgument()
                             val label = if ('|' in curr) curr.substringAfter('|').linkArgument()
                             else rawTarget
                             withLink(

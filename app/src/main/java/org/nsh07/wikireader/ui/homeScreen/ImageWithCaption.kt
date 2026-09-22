@@ -1,5 +1,7 @@
 package org.nsh07.wikireader.ui.homeScreen
 
+import org.nsh07.wikireader.data.wikiHost
+
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
@@ -42,12 +44,12 @@ fun SharedTransitionScope.ImageWithCaption(
     shape: CornerBasedShape = shapes.large
 ) {
     val uriLow = remember(text) {
-        "https://$lang.wikipedia.org/wiki/Special:FilePath/${
+        "https://${wikiHost(lang)}/wiki/Special:FilePath/${
             text.substringAfter(':').substringBefore('|').substringBefore("]]")
         }?width=720"
     }
     val uriHigh = remember(text) {
-        "https://$lang.wikipedia.org/wiki/Special:FilePath/${
+        "https://${wikiHost(lang)}/wiki/Special:FilePath/${
             text.substringAfter(':').substringBefore('|').substringBefore("]]")
         }"
     }

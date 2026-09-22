@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import org.nsh07.wikireader.R
+import org.nsh07.wikireader.data.isPsychonautWiki
 
 private object WiktionaryMenuKey
 
@@ -57,7 +58,10 @@ fun WiktionarySelectionContainer(
  * languages that have no Wiktionary of their own.
  */
 private fun openWiktionary(context: Context, lang: String, term: String) {
-    val uri = "https://${lang.ifBlank { "en" }}.wiktionary.org/wiki/${Uri.encode(term)}".toUri()
+    // Wiktionary is organised by language, so a wiki that is not a Wikipedia language has no
+    // edition of its own; look those words up in English.
+    val edition = lang.takeIf { it.isNotBlank() && !isPsychonautWiki(it) } ?: "en"
+    val uri = "https://$edition.wiktionary.org/wiki/${Uri.encode(term)}".toUri()
     try {
         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
     } catch (e: ActivityNotFoundException) {

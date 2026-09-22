@@ -1,5 +1,7 @@
 package org.nsh07.wikireader.ui.homeScreen
 
+import org.nsh07.wikireader.data.wikiHost
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -56,12 +58,12 @@ fun Gallery(
             .animateContentSize(motionScheme.defaultSpatialSpec())
     ) {
         val uriLow = remember(text) {
-            "https://$lang.wikipedia.org/wiki/Special:FilePath/${
+            "https://${wikiHost(lang)}/wiki/Special:FilePath/${
                 content[it].substringBefore('|')
             }?width=720"
         }
         val uriHigh = remember(text) {
-            "https://$lang.wikipedia.org/wiki/Special:FilePath/${
+            "https://${wikiHost(lang)}/wiki/Special:FilePath/${
                 content[it].substringBefore('|')
             }"
         }

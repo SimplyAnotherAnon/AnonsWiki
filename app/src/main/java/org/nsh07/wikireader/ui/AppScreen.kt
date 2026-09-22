@@ -86,6 +86,7 @@ import org.nsh07.wikireader.ui.homeScreen.viewModel.HomeSubscreen
 import org.nsh07.wikireader.ui.savedArticlesScreen.SavedArticlesScreenRoot
 import org.nsh07.wikireader.ui.settingsScreen.SettingsScreenRoot
 import org.nsh07.wikireader.ui.settingsScreen.viewModel.SettingsViewModel
+import org.nsh07.wikireader.data.PSYCHONAUT_WIKI_LANG
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -249,14 +250,18 @@ fun AppScreen(
             composable<HomeScreen>(
                 deepLinks = listOf(
                     navDeepLink { uriPattern = "{lang}.m.wikipedia.org/wiki/{query}" },
-                    navDeepLink { uriPattern = "{lang}.wikipedia.org/wiki/{query}" }
+                    navDeepLink { uriPattern = "{lang}.wikipedia.org/wiki/{query}" },
+                    navDeepLink { uriPattern = "psychonautwiki.org/wiki/{query}" }
                 )
             ) { backStackEntry ->
                 val uriQuery = remember { backStackEntry.arguments?.getString("query") }
                 LaunchedEffect(uriQuery) {
                     if (uriQuery != null && !deepLinkHandled) {
                         deepLinkHandled = true
+                        // Only the Wikipedia patterns capture a language, so its absence means
+                        // the PsychonautWiki link was the one that matched.
                         val lang = backStackEntry.arguments?.getString("lang")
+                            ?: PSYCHONAUT_WIKI_LANG
                         viewModel.onAction(HomeAction.StopAll)
                         delay(500) // Avoids a race condition where the hostname might not get updated in time
                         viewModel.onAction(HomeAction.LoadPage(uriQuery, lang = lang))

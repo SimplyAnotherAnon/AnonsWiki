@@ -115,6 +115,7 @@ fun Long.formatToHumanReadable(): String {
  * into its corresponding language name (e.g. "English" for en)
  */
 fun langCodeToName(langCode: String): String {
+    if (langCode == PSYCHONAUT_WIKI_LANG) return PSYCHONAUT_WIKI_NAME
     return try {
         LanguageData.langNames[LanguageData.langCodes.binarySearch(langCode)]
     } catch (_: Exception) {
