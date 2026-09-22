@@ -49,6 +49,10 @@ private val NUMBERED_PARAMETER = "^\\s*\\d+\\s*=\\s*".toRegex()
 
 private fun String.linkArgument(): String = replaceFirst(NUMBERED_PARAMETER, "").trim()
 
+/** Replaces wiki links with the text they display, for contexts that render plain characters. */
+private fun String.plainLinkText(): String =
+    replace("\\[\\[([^\\[\\]|]*\\|)?([^\\[\\]|]*)]]".toRegex()) { it.groupValues[2] }.trim()
+
 /**
  * Templates standing in for a character that would otherwise be read as markup. The key is the
  * template with its closing braces already stripped, as the parser sees it.
@@ -67,6 +71,21 @@ private val escapeTemplates = mapOf(
 
 /** An HTML tag, so unknown ones can be dropped rather than printed. */
 private val htmlTag = "</?[a-zA-Z][a-zA-Z0-9]*(\\s[^<>]*)?/?>".toRegex()
+
+/**
+ * True when this template's name is [name] — that is, the name is followed by a parameter
+ * separator, a space or the end of the template rather than by more letters.
+ *
+ * Plain `startsWith` lets a short name swallow a longer one that is not handled: `{{for` matched
+ * `{{formatnum`, so an inflation-adjusted price rendered as the hatnote text "For US, see".
+ * Names that already end in a separator are matched as-is.
+ */
+private fun String.isTemplate(name: String): Boolean {
+    if (!startsWith("{{$name", ignoreCase = true)) return false
+    if (!name.last().isLetterOrDigit()) return true
+    val next = getOrNull(name.length + 2) ?: return true
+    return !next.isLetterOrDigit()
+}
 
 /** Matches an ion charge such as `2+`, `+`, `3-` or `2−`. */
 private val CHEM_CHARGE = "^\\d*[+\u2212-]$".toRegex()
@@ -554,7 +573,7 @@ fun String.toWikitextAnnotatedString(
                                     .also { if (it) refTemplate = item }
                             } -> {
                                 val text =
-                                    if (currSubstring.startsWith("$refTemplate book", true)) {
+                                    if (currSubstring.isTemplate("${refTemplate.removePrefix("{{")} book")) {
                                         // Bracket-aware: splitting on every '|' cut parameters
                                         // whose value contains a nested template or link, and the
                                         // remainder of the citation was printed raw.
@@ -590,10 +609,10 @@ fun String.toWikitextAnnotatedString(
                                             .trim()
                                             .twas()
                                     } else if (
-                                        currSubstring.startsWith("$refTemplate web", true) ||
-                                        currSubstring.startsWith("$refTemplate news", true) ||
-                                        currSubstring.startsWith("$refTemplate AV media", true) ||
-                                        currSubstring.startsWith("$refTemplate press release", true)
+                                        currSubstring.isTemplate("${refTemplate.removePrefix("{{")} web") ||
+                                        currSubstring.isTemplate("${refTemplate.removePrefix("{{")} news") ||
+                                        currSubstring.isTemplate("${refTemplate.removePrefix("{{")} AV media") ||
+                                        currSubstring.isTemplate("${refTemplate.removePrefix("{{")} press release")
                                     ) {
                                         // Bracket-aware: splitting on every '|' cut parameters
                                         // whose value contains a nested template or link, and the
@@ -645,10 +664,7 @@ fun String.toWikitextAnnotatedString(
                                             .plus(".")
                                             .trim()
                                             .twas()
-                                    } else if (currSubstring.startsWith(
-                                            "$refTemplate journal",
-                                            true
-                                        )
+                                    } else if (currSubstring.isTemplate("${refTemplate.removePrefix("{{")} journal")
                                     ) {
                                         // Bracket-aware: splitting on every '|' cut parameters
                                         // whose value contains a nested template or link, and the
@@ -711,22 +727,22 @@ fun String.toWikitextAnnotatedString(
                                 append(escapeTemplates.getValue(currSubstring.trimEnd()))
                             }
 
-                            currSubstring.startsWith("{{abbr", ignoreCase = true) -> {
+                            currSubstring.isTemplate("abbr") -> {
                                 val curr = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append(curr.twas())
                             }
 
-                            currSubstring.startsWith("{{TableTBA", ignoreCase = true) -> {
+                            currSubstring.isTemplate("TableTBA") -> {
                                 append("<small>TBA</small>".twas())
                             }
 
-                            currSubstring.startsWith("{{efn", ignoreCase = true) -> {
+                            currSubstring.isTemplate("efn") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 curr.twas()
                             }
 
-                            currSubstring.startsWith("{{convert", ignoreCase = true) ||
-                                    currSubstring.startsWith("{{cvt", ignoreCase = true)
+                            currSubstring.isTemplate("convert") ||
+                                    currSubstring.isTemplate("cvt")
                                 -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 val currSplit = curr.split('|')
@@ -745,26 +761,35 @@ fun String.toWikitextAnnotatedString(
 
                             // The pipe is required so that {{chembox}}, {{chem-stub}} and
                             // friends do not get treated as inline formulae.
-                            currSubstring.startsWith("{{chem2|", ignoreCase = true) -> {
+                            currSubstring.isTemplate("chem2|") -> {
                                 appendChem2(
-                                    currSubstring.substringAfter('|').substringBefore('|'),
+                                    currSubstring.substringAfter('|', "")
+                                        .splitTemplateParameters()
+                                        .firstOrNull()
+                                        ?.plainLinkText()
+                                        .orEmpty(),
                                     fontSize
                                 )
                             }
 
-                            currSubstring.startsWith("{{chem|", ignoreCase = true) -> {
-                                appendChem(currSubstring.substringAfter('|').split('|'), fontSize)
+                            currSubstring.isTemplate("chem|") -> {
+                                appendChem(
+                                    currSubstring.substringAfter('|', "")
+                                        .splitTemplateParameters()
+                                        .map { it.plainLinkText() },
+                                    fontSize
+                                )
                             }
 
-                            currSubstring.startsWith("{{mono|", ignoreCase = true) -> {
+                            currSubstring.isTemplate("mono|") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
                                     append(curr.twas())
                                 }
                             }
 
-                            currSubstring.startsWith("{{math", ignoreCase = true) ||
-                                    currSubstring.startsWith("{{mvar", ignoreCase = true)
+                            currSubstring.isTemplate("math") ||
+                                    currSubstring.isTemplate("mvar")
                                 -> {
                                 val curr = currSubstring.substringAfter('|', "").removePrefix("1=")
                                 withStyle(SpanStyle(fontFamily = FontFamily.Serif)) {
@@ -772,12 +797,12 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{val", ignoreCase = true) -> {
+                            currSubstring.isTemplate("val") -> {
                                 val curr = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append(curr.twas())
                             }
 
-                            currSubstring.startsWith("{{var", ignoreCase = true) -> {
+                            currSubstring.isTemplate("var") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 append("''$curr''".twas())
                             }
@@ -791,7 +816,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{main", ignoreCase = true) -> {
+                            currSubstring.isTemplate("main") -> {
                                 val links =
                                     hatnoteLinks(currSubstring.substringAfter('|').split('|'))
                                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
@@ -811,7 +836,7 @@ fun String.toWikitextAnnotatedString(
                                 append('\n')
                             }
 
-                            currSubstring.startsWith("{{see also", ignoreCase = true) -> {
+                            currSubstring.isTemplate("see also") -> {
                                 val links = hatnoteLinks(
                                     currSubstring.substringAfter('|').split('|')
                                         .filterNot { it.startsWith('#') }
@@ -830,7 +855,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{date", ignoreCase = true) -> {
+                            currSubstring.isTemplate("date") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 val splitList = curr.split('|')
                                 if (splitList.size < 3) {
@@ -844,12 +869,12 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{dfn", true) -> {
+                            currSubstring.isTemplate("dfn") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 append("'''$curr'''".twas())
                             }
 
-                            currSubstring.startsWith("{{distinguish", ignoreCase = true) -> {
+                            currSubstring.isTemplate("distinguish") -> {
                                 val textSpecified =
                                     currSubstring.contains("text=") || currSubstring.contains("text =")
                                 val curr =
@@ -877,7 +902,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{redirect-distinguish", true) -> {
+                            currSubstring.isTemplate("redirect-distinguish") -> {
                                 val splitList = currSubstring.substringAfter('|').split('|')
                                 append("\"${splitList.getOrNull(0)}\" redirects here; not to be confused with ")
                                 splitList.subList(1, splitList.size)
@@ -898,7 +923,7 @@ fun String.toWikitextAnnotatedString(
                                 append('.')
                             }
 
-                            currSubstring.startsWith("{{format price", true) -> {
+                            currSubstring.isTemplate("format price") -> {
                                 val curr =
                                     currSubstring.substringAfter('|', "").substringBefore('|')
                                 append(
@@ -908,7 +933,7 @@ fun String.toWikitextAnnotatedString(
                                 )
                             }
 
-                            currSubstring.startsWith("{{for", true) -> {
+                            currSubstring.isTemplate("for") -> {
                                 val splitList = currSubstring.substringAfter('|').split('|')
                                     .fastFilter { !it.contains('=') }
                                 if (splitList.size > 1) {
@@ -934,7 +959,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{about", true) -> {
+                            currSubstring.isTemplate("about") -> {
                                 val splitList = currSubstring.substringAfter('|').split('|')
                                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                                     when {
@@ -1030,29 +1055,29 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{US$", true) -> {
+                            currSubstring.isTemplate("US$") -> {
                                 if (currSubstring.contains('|')) {
                                     val curr = currSubstring.substringAfter('|', "")
                                     append("US$${curr.twas()}")
                                 } else append("US$")
                             }
 
-                            currSubstring.startsWith("{{USD", true) -> {
+                            currSubstring.isTemplate("USD") -> {
                                 val amount = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append("\$$amount")
                             }
 
-                            currSubstring.startsWith("{{Euro", true) -> {
+                            currSubstring.isTemplate("Euro") -> {
                                 val amount = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append("€$amount")
                             }
 
-                            currSubstring.startsWith("{{JPY", true) -> {
+                            currSubstring.isTemplate("JPY") -> {
                                 val amount = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append("¥$amount")
                             }
 
-                            currSubstring.startsWith("{{GBP", true) -> {
+                            currSubstring.isTemplate("GBP") -> {
                                 val amount = currSubstring.substringAfter('|', "").substringBefore('|')
                                 append("£$amount")
                             }
@@ -1078,18 +1103,18 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{hatnote", ignoreCase = true) -> {
+                            currSubstring.isTemplate("hatnote") -> {
                                 val curr = currSubstring.substringAfter('|', "").replace('\n', ' ')
                                 append("''$curr''".twas())
                             }
 
-                            currSubstring.startsWith("{{IPAc-en", ignoreCase = true) -> {
+                            currSubstring.isTemplate("IPAc-en") -> {
                                 val curr = currSubstring.substringAfter('|').split('|')
                                     .filterNot { it.contains('=') }.joinToString("")
                                 append("/${curr.replace(' ', nbsp)}/")
                             }
 
-                            currSubstring.startsWith("{{langx", ignoreCase = true) -> {
+                            currSubstring.isTemplate("langx") -> {
                                 val lang = langCodeToName(
                                     currSubstring.substringAfter('|').substringBefore('|').trim()
                                 )
@@ -1104,21 +1129,21 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{lang|", ignoreCase = true) -> {
+                            currSubstring.isTemplate("lang|") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                                     append(curr.substringAfter('|').substringBefore('|').twas())
                                 }
                             }
 
-                            currSubstring.startsWith("{{transliteration", true) -> {
+                            currSubstring.isTemplate("transliteration") -> {
                                 val curr = currSubstring.substringAfterLast('|', "")
                                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                                     append(curr.twas())
                                 }
                             }
 
-                            currSubstring.startsWith("{{IPA", ignoreCase = true) -> {
+                            currSubstring.isTemplate("IPA") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 withStyle(SpanStyle(fontSize = (fontSize - 2).sp)) {
                                     append("${langCodeToName(curr.substringBefore('|'))}: ")
@@ -1131,21 +1156,21 @@ fun String.toWikitextAnnotatedString(
                                 )
                             }
 
-                            currSubstring.startsWith("{{respell", ignoreCase = true) -> {
+                            currSubstring.isTemplate("respell") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                                     append(curr.replace('|', '-'))
                                 }
                             }
 
-                            currSubstring.startsWith("{{BCE", ignoreCase = true) -> {
+                            currSubstring.isTemplate("BCE") -> {
                                 val curr = currSubstring.substringAfter('|').substringBefore('|')
                                 append(curr)
                                 append(nbsp)
                                 append("BCE")
                             }
 
-                            currSubstring.startsWith("{{blockquote", ignoreCase = true) -> {
+                            currSubstring.isTemplate("blockquote") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 withStyle(
                                     ParagraphStyle(
@@ -1168,7 +1193,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{further", ignoreCase = true) -> {
+                            currSubstring.isTemplate("further") -> {
                                 val curr = currSubstring.substringAfter('|')
                                 val splitList = curr.split('|').fastFilter { !it.contains('=') }
                                 val topic = curr.substringAfter("topic=", "").substringBefore('|')
@@ -1191,18 +1216,18 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{rp", true) -> {
+                            currSubstring.isTemplate("rp") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 append("<sup>:$curr </sup>".twas())
                             }
 
-                            currSubstring.startsWith("{{isbn", true) -> {
+                            currSubstring.isTemplate("isbn") -> {
                                 val curr = currSubstring.substringAfter('|', "").split('|')
                                     .filterNot { it.contains('=') }.joinToString()
                                 append("[[ISBN]] $curr".twas())
                             }
 
-                            currSubstring.startsWith("{{sfrac") -> {
+                            currSubstring.isTemplate("sfrac") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 val splitList = curr.split('|')
                                 when (splitList.size) {
@@ -1212,7 +1237,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{as of", ignoreCase = true) -> {
+                            currSubstring.isTemplate("as of") -> {
                                 val curr = currSubstring.substringAfter("{{")
                                 append(curr.substringBefore('|'))
                                 append(' ')
@@ -1226,7 +1251,7 @@ fun String.toWikitextAnnotatedString(
                                 append(date.trim('/'))
                             }
 
-                            currSubstring.startsWith("{{unichar", ignoreCase = true) -> {
+                            currSubstring.isTemplate("unichar") -> {
                                 val curr =
                                     currSubstring.substringAfter('|', "").substringBefore('|')
                                 append("<code>U+$curr</code> ".twas())
@@ -1236,17 +1261,24 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{char", ignoreCase = true) -> {
+                            currSubstring.isTemplate("char") -> {
                                 append(currSubstring.substringAfter('|', "").twas())
                             }
 
-                            currSubstring.startsWith("{{Nihongo", ignoreCase = true) -> {
-                                val curr = currSubstring.substringAfter('|').split('|')
-                                    .filterNot { it.contains('=') }.joinToString("|")
-                                append(curr.twas())
+                            currSubstring.isTemplate("Nihongo") -> {
+                                val params = currSubstring.substringAfter('|', "")
+                                    .splitTemplateParameters()
+                                    .map { it.trim() }
+                                    .fastFilter { it.isNotEmpty() && !it.contains('=') }
+                                if (params.isNotEmpty()) {
+                                    append(params.first().twas())
+                                    val rest = params.drop(1)
+                                    if (rest.isNotEmpty())
+                                        append(" (${rest.joinToString(", ")})".twas())
+                                }
                             }
 
-                            currSubstring.startsWith("{{flagg", ignoreCase = true) -> {
+                            currSubstring.isTemplate("flagg") -> {
                                 val curr = currSubstring.substringAfter('|').substringAfter('|')
                                     .substringBefore('|')
 
@@ -1264,7 +1296,7 @@ fun String.toWikitextAnnotatedString(
                                 append(curr.twas())
                             }
 
-                            currSubstring.startsWith("{{noflag", ignoreCase = true) -> {
+                            currSubstring.isTemplate("noflag") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 append(curr.twas())
                             }
@@ -1279,14 +1311,14 @@ fun String.toWikitextAnnotatedString(
                             currSubstring.startsWith(
                                 "{{spaced en dash",
                                 ignoreCase = true
-                            ) || currSubstring.startsWith("{{snd", ignoreCase = true)
+                            ) || currSubstring.isTemplate("snd")
                                 -> {
                                 append(nbsp)
                                 append(ndash)
                                 append(' ')
                             }
 
-                            currSubstring.startsWith("{{empty section", ignoreCase = true) -> {
+                            currSubstring.isTemplate("empty section") -> {
                                 withStyle(
                                     SpanStyle(
                                         fontStyle = FontStyle.Italic,
@@ -1321,7 +1353,7 @@ fun String.toWikitextAnnotatedString(
                                 )
                             }
 
-                            currSubstring.startsWith("{{unbulleted list", true) -> {
+                            currSubstring.isTemplate("unbulleted list") -> {
                                 val splitList = currSubstring
                                     .substringAfter('|', "")
                                     .splitNotInBraces('|', '{', '}')
@@ -1356,14 +1388,14 @@ fun String.toWikitextAnnotatedString(
                                 append("* $splitList".twas())
                             }
 
-                            currSubstring.startsWith("{{Transcluded section", true) -> {
+                            currSubstring.isTemplate("Transcluded section") -> {
                                 val title =
                                     currSubstring.split('|').filter { it.contains("source=") }
                                         .joinToString().substringAfter('=')
                                 append("''This section is transcluded from [[$title]]''".twas())
                             }
 
-                            currSubstring.startsWith("{{fb", true) -> {
+                            currSubstring.isTemplate("fb") -> {
                                 val country = currSubstring.substringAfter('|').substringBefore('|')
 
                                 when (country.length) {
@@ -1382,18 +1414,18 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{citation needed", true) -> {
+                            currSubstring.isTemplate("citation needed") -> {
                                 append("<sup>[citation needed]</sup>".twas())
                             }
 
-                            currSubstring.startsWith("{{url", true) -> {
+                            currSubstring.isTemplate("url") -> {
                                 val curr = currSubstring.substringAfter('|', "")
                                 if (curr.matches(".+://.+".toRegex()))
                                     append("[$curr ${curr.substringAfter("//")}]".twas())
                                 else append("[https://$curr $curr]".twas())
                             }
 
-                            currSubstring.startsWith("{{Starbox begin", ignoreCase = true) -> {
+                            currSubstring.isTemplate("Starbox begin") -> {
                                 val templateLength = currSubstring.length
                                 i = input.indexOf(
                                     "{{starbox end}}",
@@ -1426,13 +1458,13 @@ fun String.toWikitextAnnotatedString(
                                 append("$first <small>$second</small>".twas())
                             }
 
-                            currSubstring.startsWith("{{romanes", true) -> {
+                            currSubstring.isTemplate("romanes") -> {
                                 // Spanish/Catalan template for roman numerals
                                 val second = currSubstring.substringAfter('|').substringBefore('|')
                                 append("<small>$second</small>".twas())
                             }
 
-                            currSubstring.startsWith("{{tracce", true) -> {
+                            currSubstring.isTemplate("tracce") -> {
                                 // Italian template for music track lists
                                 val splitList = currSubstring.substringAfter('|')
                                     .split('|')
@@ -1446,7 +1478,7 @@ fun String.toWikitextAnnotatedString(
                                 }
                             }
 
-                            currSubstring.startsWith("{{reflist", true) -> {
+                            currSubstring.isTemplate("reflist") -> {
                                 val reflist = refListIndex
                                     .toSortedMap()
                                     .map { "${it.key}.\t\t${it.value}" }
