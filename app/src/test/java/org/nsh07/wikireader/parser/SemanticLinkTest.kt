@@ -41,4 +41,23 @@ class SemanticLinkTest {
         assertEquals("the planet", render("[[Earth|the planet]]"))
         assertEquals("Category:Science", render("[[:Category:Science]]"))
     }
+
+    @Test
+    fun doublyBracketedLink_doesNotLeaveStrayBrackets() {
+        // PsychonautWiki's LSD article writes [[[[UnsafeInteraction::Tramadol|Tramadol]]]].
+        assertEquals(
+            "Tramadol: avoid",
+            render("[[[[UnsafeInteraction::Tramadol|Tramadol]]]]: avoid")
+        )
+    }
+
+    @Test
+    fun strayClosingBrackets_areNotShown() {
+        assertEquals("plain text", render("plain text]]"))
+    }
+
+    @Test
+    fun singleBracketsInProseAreKept() {
+        assertEquals("[B(OH)4]\u2212 in solution", render("[B(OH)4]\u2212 in solution"))
+    }
 }

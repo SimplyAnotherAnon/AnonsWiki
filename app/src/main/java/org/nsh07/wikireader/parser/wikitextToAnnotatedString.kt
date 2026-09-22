@@ -1228,8 +1228,8 @@ fun String.toWikitextAnnotatedString(
                             }
 
                             currSubstring.isTemplate("sfrac") -> {
-                                val curr = currSubstring.substringAfter('|', "")
-                                val splitList = curr.split('|')
+                                val splitList = currSubstring.substringAfter('|', "")
+                                    .splitTemplateParameters()
                                 when (splitList.size) {
                                     3 -> append("${splitList[0]}<sup>${splitList[1]}</sup>/<sub>${splitList[2]}</sub>".twas())
                                     2 -> append("<sup>${splitList[0]}</sup>/<sub>${splitList[1]}</sub>".twas())
@@ -1512,6 +1512,28 @@ fun String.toWikitextAnnotatedString(
                         i += curr.length - 1
                     } else append(input[i])
 
+                ':' ->
+                    if ((i == 0 || input.getOrNull(i - 1) == '\n') && newLine && !inIndentCode) {
+                        val curr = input.listItemAt(i)
+                        val depth = curr.takeWhile { it == ':' }.length
+                        withStyle(
+                            ParagraphStyle(
+                                textIndent = TextIndent(
+                                    firstLine = (12 * depth).sp,
+                                    restLine = (12 * depth).sp
+                                ),
+                                lineHeight = (24 * (fontSize / 16.0)).toInt().sp,
+                                lineHeightStyle = LineHeightStyle(
+                                    alignment = LineHeightStyle.Alignment.Center,
+                                    trim = LineHeightStyle.Trim.None
+                                )
+                            )
+                        ) {
+                            append(curr.dropWhile { it == ':' }.trim().twas())
+                        }
+                        i += curr.length
+                    } else append(input[i])
+
                 '*' ->
                     if ((i == 0 || input.getOrNull(i - 1) == '\n') && newLine) {
                         val bulletCount =
@@ -1606,7 +1628,10 @@ fun String.toWikitextAnnotatedString(
                     } else append(input[i])
 
                 '[' ->
-                    if (input.getOrNull(i + 1) == '[') {
+                    // Malformed source doubles the brackets ([[[[Property::Page|Page]]]]); treat
+                    // the extra pair as part of the same link rather than as literal text.
+                    if (input.startsWith("[[[[", i)) i += 1
+                    else if (input.getOrNull(i + 1) == '[') {
                         val curr = input.substring(i + 2).substringBefore("]]")
                         if (!curr.startsWith("File:", ignoreCase = true)) {
                             // Semantic MediaWiki annotates links as [[property::value]], which
@@ -1653,6 +1678,10 @@ fun String.toWikitextAnnotatedString(
                         }
                         i += linkText.length - 1
                     } else append(input[i])
+
+                ']' ->
+                    if (input.getOrNull(i + 1) == ']') i += 1
+                    else append(input[i])
 
                 else -> append(input[i])
             }

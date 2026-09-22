@@ -25,6 +25,8 @@ import coil3.network.HttpException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -108,6 +110,9 @@ class HomeScreenViewModel(
 
     var lastQuery: Pair<String, String>? = null
     private var filesDir: String = ""
+    /** Guards the parser's global reference state; see [parseArticleSections]. */
+    private val parseMutex = Mutex()
+
     private var loaderJob = Job()
         get() {
             if (field.isCancelled) field = Job()
@@ -464,14 +469,6 @@ class HomeScreenViewModel(
                             SavedStatus.SAVED
                         else SavedStatus.NOT_SAVED
 
-                    sections = extract.size
-                    var sectionIndex = 3
-                    val articleSections = mutableListOf<Pair<Int, String>>()
-                    val parsedExtract = mutableListOf<List<AnnotatedString>>()
-
-                    ReferenceData.reset()
-                    extractText.buildRefList() // Build refList for article
-
                     if (apiResponse != null)
                         viewModelScope.launch(Dispatchers.IO) {
                             if (preferencesState.value.browsingHistory)
@@ -485,23 +482,8 @@ class HomeScreenViewModel(
                                 )
                         }
 
-                    extract.forEachIndexed { index, it ->
-                        currentSection = index + 1
-                        val parsed = parseWikitext(it)
-                        if (index % 2 == 1) {
-                            articleSections.add(
-                                Pair(
-                                    sectionIndex,
-                                    parsed.joinToString(separator = "").parseAsHtml().toString()
-                                )
-                            )
-                            sectionIndex += 2
-                        }
-                        parsedExtract.add(parsed)
-                        _homeScreenState.update { currentState ->
-                            currentState.copy(loadingProgress = currentSection.toFloat() / sections)
-                        }
-                    }
+                    val (parsedExtract, articleSections) =
+                        parseArticleSections(extract, extractText)
 
                     if (!replaceBackstackEntry || backStack.isEmpty()) backStack.add(
                         HomeSubscreen.Article(
@@ -528,8 +510,6 @@ class HomeScreenViewModel(
                             extract = parsedExtract,
                             sections = articleSections
                         )
-
-                    ReferenceData.reset()
 
                     _homeScreenState.update { currentState ->
                         currentState.copy(isLoading = false)
@@ -792,36 +772,13 @@ class HomeScreenViewModel(
                 val extractText = cleanUpWikitext(savedArticle.pageContent)
                 val extract: List<String> = parseSections(extractText)
 
-                sections = extract.size
-                var sectionIndex = 3
-                val articleSections = mutableListOf<Pair<Int, String>>()
-                val parsedExtract = mutableListOf<List<AnnotatedString>>()
-
                 preferencesStateMutableFlow.update { currentState ->
                     currentState.copy(
                         lang = savedArticle.lang
                     )
                 }
 
-                extractText.buildRefList()
-
-                extract.forEachIndexed { index, it ->
-                    currentSection = index + 1
-                    val parsed = parseWikitext(it)
-                    if (index % 2 == 1) {
-                        articleSections.add(
-                            Pair(
-                                sectionIndex,
-                                parsed.joinToString(separator = "").parseAsHtml().toString()
-                            )
-                        )
-                        sectionIndex += 2
-                    }
-                    parsedExtract.add(parsed)
-                    _homeScreenState.update { currentState ->
-                        currentState.copy(loadingProgress = currentSection.toFloat() / sections)
-                    }
-                }
+                val (parsedExtract, articleSections) = parseArticleSections(extract, extractText)
 
                 backStack.add(
                     HomeSubscreen.Article(
@@ -836,8 +793,6 @@ class HomeScreenViewModel(
                         sections = articleSections
                     )
                 )
-
-                ReferenceData.reset()
 
                 _homeScreenState.update { currentState ->
                     currentState.copy(
@@ -858,6 +813,48 @@ class HomeScreenViewModel(
      *
      * @return A list of [AnnotatedString]s representing the page content
      */
+    /**
+     * Parses an article's sections, returning the rendered sections and the heading index.
+     *
+     * Held under [parseMutex] because the parser keeps its reference state in the global
+     * [ReferenceData]: two articles parsed at the same time interleave their reference numbering,
+     * and cancelling a load does not stop the section loop, which has no suspension points of its
+     * own to cancel at.
+     */
+    private suspend fun parseArticleSections(
+        extract: List<String>,
+        extractText: String
+    ): Pair<List<List<AnnotatedString>>, List<Pair<Int, String>>> = parseMutex.withLock {
+        ReferenceData.reset()
+        extractText.buildRefList() // Build refList for article
+
+        sections = extract.size
+        var sectionIndex = 3
+        val articleSections = mutableListOf<Pair<Int, String>>()
+        val parsedExtract = mutableListOf<List<AnnotatedString>>()
+
+        extract.forEachIndexed { index, it ->
+            currentSection = index + 1
+            val parsed = parseWikitext(it)
+            if (index % 2 == 1) {
+                articleSections.add(
+                    Pair(
+                        sectionIndex,
+                        parsed.joinToString(separator = "").parseAsHtml().toString()
+                    )
+                )
+                sectionIndex += 2
+            }
+            parsedExtract.add(parsed)
+            _homeScreenState.update { currentState ->
+                currentState.copy(loadingProgress = currentSection.toFloat() / sections)
+            }
+        }
+
+        ReferenceData.reset()
+        parsedExtract to articleSections
+    }
+
     private suspend fun parseWikitext(wikitext: String): List<AnnotatedString> =
         parseArticleBlocks(
             wikitext = wikitext,
