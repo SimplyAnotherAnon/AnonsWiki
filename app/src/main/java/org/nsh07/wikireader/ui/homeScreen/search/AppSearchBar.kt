@@ -458,7 +458,7 @@ fun AppSearchBar(
                             }
                             items(
                                 appSearchBarState.prefixSearchResults ?: emptyList(),
-                                key = { "${it.title}-prefix" }
+                                key = { searchResultKey(it.lang, it.title, "prefix") }
                             ) {
                                 ListItem(
                                     overlineContent = it.lang?.let { lang ->
@@ -479,16 +479,17 @@ fun AppSearchBar(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     },
-                                    supportingContent = if (it.terms != null) {
-                                        {
-                                            Text(
-                                                it.terms.description[0],
-                                                softWrap = true,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    } else null,
+                                    supportingContent =
+                                        it.terms?.description?.firstOrNull()?.let { description ->
+                                            {
+                                                Text(
+                                                    description,
+                                                    softWrap = true,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        },
                                     trailingContent = {
                                         if (it.thumbnail != null && !preferencesState.dataSaver)
                                             FeedImage(
@@ -521,18 +522,32 @@ fun AppSearchBar(
                             }
                             items(
                                 appSearchBarState.searchResults ?: emptyList(),
-                                key = { "${it.title}-search" }) {
+                                key = { searchResultKey(it.lang, it.title, "search") }) {
                                 ListItem(
-                                    overlineContent = if (it.redirectTitle != null) {
+                                    overlineContent = if (it.lang != null || it.redirectTitle != null) {
                                         {
-                                            Text(
-                                                stringResource(
-                                                    R.string.redirectedFrom,
-                                                    it.redirectTitle
-                                                ),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (it.lang != null) {
+                                                    Text(
+                                                        langCodeToName(it.lang),
+                                                        style = typography.labelSmall,
+                                                        color = colorScheme.primary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    if (it.redirectTitle != null)
+                                                        Text(" \u00b7 ", style = typography.labelSmall)
+                                                }
+                                                if (it.redirectTitle != null)
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.redirectedFrom,
+                                                            it.redirectTitle
+                                                        ),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                            }
                                         }
                                     } else null,
                                     headlineContent = {
@@ -684,7 +699,7 @@ fun AppSearchBar(
                             }
                             itemsIndexed(
                                 appSearchBarState.prefixSearchResults ?: emptyList(),
-                                key = { index: Int, it: WikiPrefixSearchResult -> "${it.title}-prefix" }
+                                key = { _: Int, it: WikiPrefixSearchResult -> searchResultKey(it.lang, it.title, "prefix") }
                             ) { index: Int, it: WikiPrefixSearchResult ->
                                 PrefixSearchResultListItem(
                                     item = it,
@@ -708,7 +723,7 @@ fun AppSearchBar(
                             }
                             itemsIndexed(
                                 appSearchBarState.searchResults ?: emptyList(),
-                                key = { index: Int, it: WikiSearchResult -> "${it.title}-search" }
+                                key = { _: Int, it: WikiSearchResult -> searchResultKey(it.lang, it.title, "search") }
                             ) { index: Int, it: WikiSearchResult ->
                                 SearchResultListItem(
                                     it = it,
