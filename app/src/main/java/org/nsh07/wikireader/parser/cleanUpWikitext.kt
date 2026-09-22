@@ -6,7 +6,7 @@ package org.nsh07.wikireader.parser
  * @param wikitext Source Wikitext to clean up
  */
 fun cleanUpWikitext(wikitext: String): String {
-    return expandEpisodeTables(wikitext)
+    return convertHtmlTables(expandEpisodeTables(wikitext))
         .replace("<!--.+?-->".toRegex(), "")
         .replace("</?onlyinclude>".toRegex(RegexOption.IGNORE_CASE), "")
         .replace("</?noinclude>".toRegex(RegexOption.IGNORE_CASE), "")
@@ -112,4 +112,139 @@ internal fun String.splitTemplateParameters(): List<String> {
     if (curr.isNotEmpty()) out.add(curr.toString())
 
     return out
+}
+
+/** Matches a table-structure tag, capturing its name and attributes. */
+private val tableTag =
+    "</?(table|caption|tr|th|td)\\b([^<>]*)>".toRegex(RegexOption.IGNORE_CASE)
+
+/** Severity classes used by substance-box interaction rows, and the label each stands for. */
+private val severityClasses = listOf(
+    "SBInteractionDangerous" to "Dangerous",
+    "SBInteractionUnsafe" to "Unsafe",
+    "SBInteractionUncertain" to "Caution",
+    "SBInteractionLowRisk" to "Low risk",
+    "SBInteractionCaution" to "Caution",
+)
+
+/** The attributes a wikitable cell carries through; the rest are presentation. */
+private val keptCellAttributes = "\\b(colspan|rowspan)\\s*=\\s*\"?(\\d+)\"?".toRegex(RegexOption.IGNORE_CASE)
+
+/**
+ * Rewrites HTML tables as wikitables.
+ *
+ * MediaWiki accepts both spellings and templates routinely emit the HTML one — PsychonautWiki's
+ * substance box, which carries the routes of administration, dosages and durations, is an HTML
+ * `<table>`. The app renders only wikitables, so those tables were invisible.
+ *
+ * Nested tables are converted from the inside out, and cell content is flattened onto one line
+ * because the wikitable parser reads a table line by line.
+ */
+internal fun convertHtmlTables(wikitext: String): String {
+    if (!wikitext.contains("<table", ignoreCase = true)) return wikitext
+
+    val out = StringBuilder()
+    var i = 0
+    while (i < wikitext.length) {
+        val start = wikitext.indexOf("<table", i, ignoreCase = true)
+        if (start < 0) {
+            out.append(wikitext, i, wikitext.length)
+            break
+        }
+        out.append(wikitext, i, start)
+
+        val end = matchingTableEnd(wikitext, start)
+        if (end < 0) { // Unbalanced: leave the rest alone rather than guess.
+            out.append(wikitext, start, wikitext.length)
+            break
+        }
+        out.append(htmlTableToWikitable(wikitext.substring(start, end)))
+        i = end
+    }
+    return out.toString()
+}
+
+/** The index just past the `</table>` closing the table that opens at [start]. */
+private fun matchingTableEnd(text: String, start: Int): Int {
+    var depth = 0
+    var i = start
+    while (i < text.length) {
+        when {
+            text.startsWith("<table", i, ignoreCase = true) -> depth++
+            text.startsWith("</table", i, ignoreCase = true) -> {
+                depth--
+                val close = text.indexOf('>', i)
+                if (close < 0) return -1
+                if (depth == 0) return close + 1
+                i = close
+            }
+        }
+        i++
+    }
+    return -1
+}
+
+private fun htmlTableToWikitable(table: String): String {
+    val rows = StringBuilder("\n{| class=\"wikitable\"\n")
+    var cell: StringBuilder? = null
+    var cellPrefix = ""
+    var depth = 0
+    var i = 0
+
+    fun flushCell() {
+        val content = cell?.toString()?.replace("\\s+".toRegex(), " ")?.trim().orEmpty()
+        if (cell != null) rows.append(cellPrefix).append(content).append('\n')
+        cell = null
+    }
+
+    while (i < table.length) {
+        val match = tableTag.find(table, i)
+        if (match == null) {
+            cell?.append(table, i, table.length)
+            break
+        }
+        cell?.append(table, i, match.range.first)
+
+        val name = match.groupValues[1].lowercase()
+        val closing = match.value.startsWith("</")
+        val rawAttributes = match.groupValues[2]
+        val attributes = keptCellAttributes.findAll(rawAttributes)
+            .joinToString(" ") { "${it.groupValues[1].lowercase()}=${it.groupValues[2]}" }
+        val severity = severityClasses
+            .firstOrNull { (cls, _) -> rawAttributes.contains(cls, ignoreCase = true) }
+            ?.second
+
+        when {
+            // A nested table's rows are folded into the parent. The alternative, a wikitable
+            // inside a cell, renders as its own markup because a cell is laid out as text.
+            name == "table" && !closing -> { depth++; flushCell() }
+
+            name == "table" && closing -> { depth--; flushCell() }
+
+            name == "tr" && !closing -> { flushCell(); rows.append("|-\n") }
+
+            name == "caption" && !closing -> { flushCell(); cell = StringBuilder(); cellPrefix = "|+ " }
+
+            name == "th" && !closing -> {
+                flushCell()
+                cell = StringBuilder()
+                cellPrefix = if (attributes.isEmpty()) "! " else "! $attributes | "
+                if (severity != null) cell?.append("$severity: ")
+            }
+
+            name == "td" && !closing -> {
+                flushCell()
+                cell = StringBuilder()
+                cellPrefix = if (attributes.isEmpty()) "| " else "| $attributes | "
+                if (severity != null) cell?.append("$severity: ")
+            }
+
+            closing -> flushCell()
+        }
+        i = match.range.last + 1
+    }
+    flushCell()
+
+    rows.append("|}\n")
+    return rows.toString()
 }

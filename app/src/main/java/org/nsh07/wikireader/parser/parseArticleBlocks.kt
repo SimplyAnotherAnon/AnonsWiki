@@ -121,42 +121,25 @@ suspend fun parseArticleBlocks(
                 }
             } else if (wikitext[i] == '{') {
                 if (wikitext.getOrNull(i + 1) == '|') {
+                    // The whole table, nested ones included: substringMatchingParen already
+                    // balances the braces. This used to hand back only the *inner* table of a
+                    // nested pair and advance past the outer one by the inner one's length, so an
+                    // infobox-style table built from nested tables — PsychonautWiki's substance
+                    // box, with its routes of administration, dosages and durations — disappeared
+                    // and left the parser reading from the middle of it.
                     val currSubstring = wikitext.substringMatchingParen('{', '}', i)
-                    if (!currSubstring.substring(min(i + 2, currSubstring.lastIndex))
-                            .contains("{|")
-                    ) {
-                        out.add(
-                            curr.toWikitextAnnotatedString(
-                                colorScheme = colorScheme,
-                                typography = typography,
-                                loadPage = loadPage,
-                                fontSize = fontSize,
-                                showRef = showRef
-                            )
+                    out.add(
+                        curr.toWikitextAnnotatedString(
+                            colorScheme = colorScheme,
+                            typography = typography,
+                            loadPage = loadPage,
+                            fontSize = fontSize,
+                            showRef = showRef
                         )
-                        out.add(AnnotatedString(currSubstring))
-                        curr = ""
-                        i += currSubstring.length
-                    } else {
-                        val currSubstringNestedTable =
-                            wikitext.substringMatchingParen(
-                                '{',
-                                '}',
-                                wikitext.indexOf("{|", i + 2)
-                            )
-                        out.add(
-                            curr.toWikitextAnnotatedString(
-                                colorScheme = colorScheme,
-                                typography = typography,
-                                loadPage = loadPage,
-                                fontSize = fontSize,
-                                showRef = showRef
-                            )
-                        )
-                        out.add(AnnotatedString(currSubstringNestedTable))
-                        curr = ""
-                        i += currSubstring.length
-                    }
+                    )
+                    out.add(AnnotatedString(currSubstring))
+                    curr = ""
+                    i += currSubstring.length
                 } else if (
                     stack < 2 && wikitext.getOrNull(i + 1) == '{' &&
                     wikitext.substring(i, min(i + 24, wikitext.length))

@@ -59,13 +59,31 @@ class NetworkWikipediaRepository(
                 wikipediaPageApiService.getPageContent(it, host)
             }
             expandPageTransclusions(
-                expandSectionTransclusions(
-                    wikipediaPageApiService.getPageContent(title, host),
-                    fetch
-                ),
+                expandSectionTransclusions(fetchPageWikitext(title, host), fetch),
                 fetch
             )
         }
+
+    /**
+     * The page's wikitext.
+     *
+     * Wikis that keep article content in transcluded templates are asked to expand them first:
+     * on PsychonautWiki the substance box, the effect lists and the experience reports are all
+     * template calls, so the raw wikitext of an article is mostly `{{SubstanceBox/LSD}}` and
+     * little else. Wikipedia is read raw, since the app renders its templates itself and knows
+     * more about them than a server-side expansion would leave behind.
+     */
+    private suspend fun fetchPageWikitext(title: String, host: String?): String =
+        if (host == PSYCHONAUT_WIKI_HOST) {
+            runCatching {
+                // The expansion answers JSON, so it goes through the JSON-converting service
+                // rather than the raw-text one used for action=raw.
+                wikipediaApiService
+                    .getExpandedPageContent(title, "{{:$title}}", host)
+                    .expandtemplates.wikitext
+                    .ifBlank { null }
+            }.getOrNull() ?: wikipediaPageApiService.getPageContent(title, host)
+        } else wikipediaPageApiService.getPageContent(title, host)
 
     override suspend fun getRandomResult(host: String?): WikiApiPageData =
         withContext(ioDispatcher) {

@@ -1,5 +1,6 @@
 package org.nsh07.wikireader.network
 
+import org.nsh07.wikireader.data.ExpandTemplatesResponse
 import org.nsh07.wikireader.data.FeedApiResponse
 import org.nsh07.wikireader.data.WikiApiPageData
 import org.nsh07.wikireader.data.WikiApiPrefixSearchResults
@@ -14,6 +15,9 @@ private const val API_QUERY =
 
 private const val CONTENT_QUERY =
     "wiki/{title}?action=raw&maxage=900&smaxage=900"
+
+private const val EXPAND_TEMPLATES_QUERY =
+    "w/api.php?action=expandtemplates&prop=wikitext&format=json&formatversion=2&maxage=900&smaxage=900"
 
 private const val FEED_QUERY =
     "api/rest_v1/feed/featured/{date}"
@@ -55,6 +59,17 @@ interface WikipediaApiService {
         @Path("title", encoded = true) title: String,
         @Header(HostSelectionInterceptor.HOST_HEADER) host: String?
     ): String
+
+    /**
+     * The page's wikitext with its templates expanded, for wikis that keep article content in
+     * transcluded templates.
+     */
+    @GET(EXPAND_TEMPLATES_QUERY)
+    suspend fun getExpandedPageContent(
+        @Query("title") title: String,
+        @Query("text") text: String,
+        @Header(HostSelectionInterceptor.HOST_HEADER) host: String?
+    ): ExpandTemplatesResponse
 
     @GET(RANDOM_QUERY)
     suspend fun getRandomResult(

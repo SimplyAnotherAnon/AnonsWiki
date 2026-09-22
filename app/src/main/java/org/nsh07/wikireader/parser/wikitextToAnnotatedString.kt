@@ -70,7 +70,16 @@ private val escapeTemplates = mapOf(
 )
 
 /** An HTML tag, so unknown ones can be dropped rather than printed. */
-private val htmlTag = "</?[a-zA-Z][a-zA-Z0-9]*(\\s[^<>]*)?/?>".toRegex()
+private val htmlTag = "</?([a-zA-Z][a-zA-Z0-9]*)(\\s[^<>]*)?/?>".toRegex()
+
+/**
+ * Tags that separate their contents from what follows. Dropping these silently runs the lines of
+ * a list together ("First Time ExperienceExperience: 385μg LSD…"), so they leave a break behind.
+ */
+private val blockHtmlTags = setOf(
+    "p", "div", "br", "li", "ul", "ol", "tr", "table", "section", "article", "blockquote",
+    "h1", "h2", "h3", "h4", "h5", "h6", "dd", "dt", "dl", "hr", "figure", "figcaption"
+)
 
 /**
  * True when this template's name is [name] — that is, the name is followed by a parameter
@@ -553,7 +562,17 @@ fun String.toWikitextAnnotatedString(
                             // Drop the tag itself and keep whatever it wraps. Wikipedia scatters
                             // invisible anchors through headings, and every tag the parser does
                             // not know was printed verbatim.
-                            i += (htmlTag.matchAt(currSubstring, 0)?.value?.length ?: 1) - 1
+                            val tag = htmlTag.matchAt(currSubstring, 0)
+                            val isBlock =
+                                tag != null && tag.groupValues[1].lowercase() in blockHtmlTags
+                            // Adjacent block tags (`</li><li>`) separate one pair of lines, not
+                            // two, so only the last of a run writes the break. The builder cannot
+                            // be read back to check what was appended last.
+                            val nextIsBlock = tag != null &&
+                                    htmlTag.matchAt(currSubstring, tag.value.length)
+                                        ?.groupValues?.get(1)?.lowercase() in blockHtmlTags
+                            if (isBlock && length > 0 && !nextIsBlock) append('\n')
+                            i += (tag?.value?.length ?: 1) - 1
                         }
 
                         else -> {
@@ -1633,7 +1652,9 @@ fun String.toWikitextAnnotatedString(
                     if (input.startsWith("[[[[", i)) i += 1
                     else if (input.getOrNull(i + 1) == '[') {
                         val curr = input.substring(i + 2).substringBefore("]]")
-                        if (!curr.startsWith("File:", ignoreCase = true)) {
+                        // Templates emit links padded with spaces ([[ File:LSD.svg | frameless ]]),
+                        // which were being rendered as a link labelled with the image options.
+                        if (!curr.trimStart().startsWith("File:", ignoreCase = true)) {
                             // Semantic MediaWiki annotates links as [[property::value]], which
                             // PsychonautWiki uses heavily; only the value is shown. The leading
                             // colon of [[:Category:X]] is markup too, and was being shown when
